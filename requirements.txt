@@ -1,0 +1,25 @@
+# Engineering Design Plugin - Python Dependencies
+
+# 3D CAD
+cadquery>=2.4
+
+# Circuit Design
+skidl>=1.2
+
+# SPICE Simulation
+PySpice>=1.5
+
+# Schematic Drawing
+schemdraw>=0.22
+
+# Numerical Computing
+numpy>=1.20
+
+# Plotting
+matplotlib>=3.5
+
+# STL Processing (for preview)
+numpy-stl>=2.16
+
+# Optional: VTK for high-quality 3D rendering
+# vtk>=9.0

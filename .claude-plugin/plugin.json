@@ -1,0 +1,20 @@
+{
+  "name": "engineering-design",
+  "version": "1.0.0",
+  "description": "機械製図・3Dモデリングと電子回路設計の統合プラグイン。自然言語から仕様書を生成し、CadQuery/SKiDLコードを自動生成。",
+  "author": {
+    "name": "Koizumi"
+  },
+  "repository": "https://github.com/koizumi/engineering-design-plugin",
+  "license": "MIT",
+  "keywords": [
+    "cad",
+    "cadquery",
+    "3d-modeling",
+    "mechanical-design",
+    "circuit-design",
+    "skidl",
+    "electronics",
+    "engineering"
+  ]
+}

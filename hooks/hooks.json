@@ -1,0 +1,28 @@
+{
+  "description": "Engineering Design Plugin validation hooks",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/validate-code.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "CadQueryまたはSKiDLスクリプトの実行結果を確認してください。エラーがあれば原因を分析し、修正案を提示してください。特に以下の点をチェック:\n1. 形状の妥当性（isValid()）\n2. ERC（電気的ルールチェック）エラー\n3. 出力ファイルの生成確認"
+          }
+        ]
+      }
+    ]
+  }
+}
