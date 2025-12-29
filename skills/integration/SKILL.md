@@ -7,6 +7,7 @@ description: |
   (3) コネクタ位置と開口部の照合
   入力: 統合仕様書
   出力: 整合性レポート
+allowed-tools: Read, Glob, Grep, Edit, Write, Bash
 ---
 
 # Integration Skill

@@ -7,6 +7,7 @@ description: |
   (3) パラメトリック設計や穴・フィレット加工の指定
   入力: 仕様書または自然言語要望
   出力: Pythonスクリプト、STEP、STL、PNG
+allowed-tools: Read, Glob, Grep, Edit, Write, Bash
 ---
 
 # Mechanical CAD Skill

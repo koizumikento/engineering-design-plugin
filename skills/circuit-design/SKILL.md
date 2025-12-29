@@ -7,6 +7,7 @@ description: |
   (3) SPICEシミュレーション
   入力: 仕様書または自然言語要望
   出力: Pythonスクリプト、ネットリスト、SVG、シミュレーション結果
+allowed-tools: Read, Glob, Grep, Edit, Write, Bash
 ---
 
 # Circuit Design Skill

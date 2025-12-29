@@ -7,6 +7,7 @@ description: |
   (3) 統合設計の仕様策定
   入力: 自然言語要望
   出力: Markdown仕様書
+allowed-tools: Read, Glob, Grep, Edit, Write, Bash
 ---
 
 # 仕様書作成スキル
