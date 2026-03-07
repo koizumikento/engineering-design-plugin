@@ -307,7 +307,7 @@ def main():
             from PySpice.Spice.Netlist import Circuit
             from PySpice.Unit import u_V, u_Ohm, u_F
         except ImportError:
-            print("Error: PySpice is not installed. Run: pip install PySpice", file=sys.stderr)
+            print("Error: PySpice is not installed. Run: uv sync", file=sys.stderr)
             sys.exit(1)
 
         # 回路読み込み

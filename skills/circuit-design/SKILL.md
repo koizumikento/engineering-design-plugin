@@ -27,16 +27,16 @@ allowed-tools: Read, Glob, Grep, Edit, Write, Bash
 
 3. **ERC実行と標準出力生成**
    ```bash
-   python3 scripts/skidl_runner.py input.py -o outputs/ --bom
+   uv run python scripts/skidl_runner.py input.py -o outputs/ --bom
    ```
-   - [ ] `python3 -m py_compile input.py` で構文エラーがないことを確認
+   - [ ] `uv run python -m py_compile input.py` で構文エラーがないことを確認
    - [ ] 未接続ピンの検出
    - [ ] 電源接続の確認
    - [ ] ネットリストとBOMが生成されたことを確認
 
 4. **追加出力の要否を判定**
-   - [ ] 回路図が必要な場合は `python3 scripts/schemdraw_render.py input.py -o outputs/` を実行
-   - [ ] シミュレーションが必要な場合は `references/spice-guide.md` を参照し、`python3 scripts/pyspice_sim.py input.py -o outputs/ [--dc|--ac|--tran]` を実行
+   - [ ] 回路図が必要な場合は `uv run python scripts/schemdraw_render.py input.py -o outputs/` を実行
+   - [ ] シミュレーションが必要な場合は `references/spice-guide.md` を参照し、`uv run python scripts/pyspice_sim.py input.py -o outputs/ [--dc|--ac|--tran]` を実行
    - [ ] 追加出力が不要ならここで完了
 
 5. **出力ファイル生成**
@@ -49,7 +49,7 @@ allowed-tools: Read, Glob, Grep, Edit, Write, Bash
 
 ## 回路図生成
 
-- `python3 scripts/schemdraw_render.py input.py -o outputs/`
+- `uv run python scripts/schemdraw_render.py input.py -o outputs/`
 - 想定出力:
   - SVG: `outputs/[project-name]-schematic.svg`
   - PNG: `outputs/[project-name]-schematic.png`
@@ -60,9 +60,9 @@ allowed-tools: Read, Glob, Grep, Edit, Write, Bash
 
 ## シミュレーション
 
-- `python3 scripts/pyspice_sim.py input.py -o outputs/ --dc`
-- `python3 scripts/pyspice_sim.py input.py -o outputs/ --ac`
-- `python3 scripts/pyspice_sim.py input.py -o outputs/ --tran`
+- `uv run python scripts/pyspice_sim.py input.py -o outputs/ --dc`
+- `uv run python scripts/pyspice_sim.py input.py -o outputs/ --ac`
+- `uv run python scripts/pyspice_sim.py input.py -o outputs/ --tran`
 
 | 種類 | オプション | 説明 |
 |------|-----------|------|

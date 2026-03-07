@@ -1,0 +1,22 @@
+[project]
+name = "engineering-design-plugin"
+version = "0.1.0"
+description = "Engineering design agent skills and helper scripts."
+requires-python = ">=3.9"
+dependencies = [
+    "cadquery>=2.4",
+    "matplotlib>=3.5",
+    "numpy>=1.20",
+    "numpy-stl>=2.16",
+    "PySpice>=1.5",
+    "schemdraw>=0.22",
+    "skidl>=1.2",
+]
+
+[project.optional-dependencies]
+preview = [
+    "vtk>=9.0",
+]
+
+[tool.uv]
+package = false

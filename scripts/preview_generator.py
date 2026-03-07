@@ -270,7 +270,7 @@ def main():
         try:
             import cadquery as cq
         except ImportError:
-            print("Error: CadQuery is not installed. Run: pip install cadquery", file=sys.stderr)
+            print("Error: CadQuery is not installed. Run: uv sync", file=sys.stderr)
             sys.exit(1)
 
         # ファイル読み込み

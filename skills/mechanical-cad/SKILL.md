@@ -27,15 +27,15 @@ allowed-tools: Read, Glob, Grep, Edit, Write, Bash
 
 3. **実行・検証**
    ```bash
-   python3 scripts/cadquery_runner.py input.py -o outputs/
+   uv run python scripts/cadquery_runner.py input.py -o outputs/
    ```
-   - [ ] `python3 -m py_compile input.py` で構文エラーがないことを確認
+   - [ ] `uv run python -m py_compile input.py` で構文エラーがないことを確認
    - [ ] isValid()で形状の妥当性確認
    - [ ] 体積・表面積を算出して報告
    - [ ] STEPとSTLが生成されたことを確認
 
 4. **追加出力の要否を判定**
-   - [ ] プレビュー画像が必要な場合は `python3 scripts/cadquery_runner.py input.py -o outputs/ --preview` を実行
+   - [ ] プレビュー画像が必要な場合は `uv run python scripts/cadquery_runner.py input.py -o outputs/ --preview` を実行
    - [ ] PNGが不要ならここで完了
 
 5. **出力ファイル生成**
@@ -48,7 +48,7 @@ allowed-tools: Read, Glob, Grep, Edit, Write, Bash
 ## プレビュー生成
 
 - 入力は STEP / STL / CadQuery スクリプトのいずれでもよい
-- プレビューだけ欲しい場合は `python3 scripts/preview_generator.py input.step -o outputs/` を実行
+- プレビューだけ欲しい場合は `uv run python scripts/preview_generator.py input.step -o outputs/` を実行
 - 想定出力:
   - PNG: `outputs/[project-name]-preview.png`
   - 複数視点: `outputs/[project-name]-[front|top|iso].png`

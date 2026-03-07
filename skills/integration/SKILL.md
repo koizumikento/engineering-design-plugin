@@ -20,7 +20,7 @@ allowed-tools: Read, Glob, Grep, Edit, Write, Bash
 
 2. **整合性チェック**
    ```bash
-   python3 scripts/integration_checker.py specs/[project-name]-integrated-spec.md -o outputs/
+   uv run python scripts/integration_checker.py specs/[project-name]-integrated-spec.md -o outputs/
    ```
    - [ ] 基板外形と筐体内寸の適合性
    - [ ] コネクタ位置と開口部位置の一致

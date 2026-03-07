@@ -201,7 +201,7 @@ def main():
             from skidl import set_default_tool, KICAD
             set_default_tool(KICAD)
         except ImportError:
-            print("Error: SKiDL is not installed. Run: pip install skidl", file=sys.stderr)
+            print("Error: SKiDL is not installed. Run: uv sync", file=sys.stderr)
             sys.exit(1)
 
         # スクリプト実行

@@ -261,14 +261,14 @@ def main():
             import schemdraw
             import schemdraw.elements as elm
         except ImportError:
-            print("Error: schemdraw is not installed. Run: pip install schemdraw", file=sys.stderr)
+            print("Error: schemdraw is not installed. Run: uv sync", file=sys.stderr)
             sys.exit(1)
 
         try:
             from skidl import set_default_tool, KICAD
             set_default_tool(KICAD)
         except ImportError:
-            print("Error: SKiDL is not installed. Run: pip install skidl", file=sys.stderr)
+            print("Error: SKiDL is not installed. Run: uv sync", file=sys.stderr)
             sys.exit(1)
 
         # 回路読み込み
