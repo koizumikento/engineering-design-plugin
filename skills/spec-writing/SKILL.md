@@ -27,12 +27,13 @@ allowed-tools: Read, Glob, Grep, Edit, Write, Bash
    - 希望する出力形式
 
 3. **仕様書生成**
-   - `${CLAUDE_PLUGIN_ROOT}/templates/spec/`のテンプレートを使用
+   - `templates/spec/` のテンプレートを使用
    - 要件をチェックリスト形式で記載
    - 数値仕様は表形式で整理
 
 4. **ファイル出力**
-   - `specs/[project-name]-spec.md`に保存
+   - 機械設計・回路設計: `specs/[project-name]-spec.md`に保存
+   - 統合設計: `specs/[project-name]-integrated-spec.md`に保存
    - ユーザーに確認・承認を依頼
 
 ## 仕様書の品質基準
@@ -52,4 +53,4 @@ allowed-tools: Read, Glob, Grep, Edit, Write, Bash
 
 ## 詳細
 
-`refs/spec-templates.md`を参照
+`references/spec-templates.md`を参照

@@ -6,7 +6,8 @@ description: |
   (2) STEP/STLファイルの生成が必要な場合
   (3) パラメトリック設計や穴・フィレット加工の指定
   入力: 仕様書または自然言語要望
-  出力: Pythonスクリプト、STEP、STL、PNG
+  出力: Pythonスクリプト、STEP、STL
+  追加出力: 必要に応じてプレビュー画像（PNG）
 allowed-tools: Read, Glob, Grep, Edit, Write, Bash
 ---
 
@@ -20,21 +21,43 @@ allowed-tools: Read, Glob, Grep, Edit, Write, Bash
    - [ ] 必須項目（寸法、材質、出力形式）が揃っているか
 
 2. **コード生成**
-   - [ ] `refs/cadquery-api.md`を参照
+   - [ ] `references/cadquery-api.md`を参照
    - [ ] パラメトリック設計を優先
    - [ ] 仕様書との対応をコメントで明記
 
 3. **実行・検証**
    ```bash
-   python3 ${CLAUDE_PLUGIN_ROOT}/scripts/cadquery_runner.py input.py -o outputs/
+   python3 scripts/cadquery_runner.py input.py -o outputs/
    ```
+   - [ ] `python3 -m py_compile input.py` で構文エラーがないことを確認
    - [ ] isValid()で形状の妥当性確認
    - [ ] 体積・表面積を算出して報告
+   - [ ] STEPとSTLが生成されたことを確認
 
-4. **出力ファイル生成**
-   - STEP: `outputs/[project-name].step`
-   - STL: `outputs/[project-name].stl`
-   - PNG: `outputs/[project-name]-preview.png`
+4. **追加出力の要否を判定**
+   - [ ] プレビュー画像が必要な場合は `python3 scripts/cadquery_runner.py input.py -o outputs/ --preview` を実行
+   - [ ] PNGが不要ならここで完了
+
+5. **出力ファイル生成**
+   - 標準出力:
+     - STEP: `outputs/[project-name].step`
+     - STL: `outputs/[project-name].stl`
+   - 追加出力（要求時のみ）:
+     - PNG: `outputs/[project-name]-preview.png`
+
+## プレビュー生成
+
+- 入力は STEP / STL / CadQuery スクリプトのいずれでもよい
+- プレビューだけ欲しい場合は `python3 scripts/preview_generator.py input.step -o outputs/` を実行
+- 想定出力:
+  - PNG: `outputs/[project-name]-preview.png`
+  - 複数視点: `outputs/[project-name]-[front|top|iso].png`
+
+## 実行後の確認
+
+- [ ] 実行ログに `isValid() = False` や自己交差エラーが出ていない
+- [ ] STEP / STL / PNG の期待ファイルが生成されている
+- [ ] エラーがある場合はフィレット、ブーリアン順序、肉厚を見直す
 
 ## 基本パターン
 
@@ -69,6 +92,6 @@ cq.exporters.export(result, "output.stl")
 
 ## 詳細
 
-- `refs/cadquery-api.md` - CadQuery APIリファレンス
-- `refs/jis-drawing.md` - JIS製図規格
-- `refs/templates.md` - テンプレート集
+- `references/cadquery-api.md` - CadQuery APIリファレンス
+- `references/jis-drawing.md` - JIS製図規格
+- `references/templates.md` - テンプレート集

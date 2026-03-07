@@ -1,27 +1,41 @@
-# Engineering Design Plugin
+# Engineering Design Agent Skills
 
-機械製図・3Dモデリングと電子回路設計を統合したClaude Codeプラグイン。
-自然言語要望から仕様書（Markdown）を生成し、CadQuery/SKiDLコードを自動生成します。
+機械設計、電子回路設計、統合設計を扱うためのエージェントスキル集です。自然言語の要望から仕様書を作り、CadQuery と SKiDL を使った設計作業につなげます。
 
-## 特徴
+このリポジトリでは `skills/` を正本とし、エージェントが読むべき運用知識は `SKILL.md` と `references/`、`templates/`、`scripts/` に集約しています。OpenAI/Codex 向けのメタデータは各スキルの `agents/openai.yaml` に置き、Claude Code 向けにはインストール用メタデータとして `.claude-plugin/` を残しています。
 
-- **自然言語から設計**: 要望を伝えるだけで仕様書を自動生成
-- **機械設計**: CadQueryによる3D CADモデル生成（STEP/STL）
-- **回路設計**: SKiDLによる回路設計（ネットリスト/BOM）
+## できること
+
+- **仕様策定**: 自然言語要望から機械/回路/統合仕様書を生成
+- **機械設計**: CadQuery による 3D CAD モデル生成と STEP/STL 出力
+- **回路設計**: SKiDL による回路生成、ネットリスト/BOM 出力
+- **追加検証**: 回路図生成、SPICE シミュレーション、3D プレビュー生成
 - **統合設計**: 基板と筐体の整合性チェック
-- **シミュレーション**: PySpiceによるSPICE回路シミュレーション
 
-## インストール
+## 含まれるスキル
+
+- `spec-writing`: 自然言語から機械/回路/統合仕様書を生成
+- `mechanical-cad`: CadQuery による 3D CAD モデル生成とプレビュー
+- `circuit-design`: SKiDL による回路設計、回路図生成、SPICE シミュレーション
+- `integration`: 基板と筐体の整合性チェック
+
+各スキルは以下の構成に寄せています。
+
+- `SKILL.md`: 実行手順とトリガー条件
+- `references/`: 必要になったときだけ読む参照資料
+- `agents/openai.yaml`: OpenAI/Codex 向けの表示名、短い説明、既定プロンプト、起動ポリシー
+
+## セットアップ
 
 ### 前提条件
 
-- Python 3.9以上
-- Claude Code
+- Python 3.9 以上
+- CadQuery / SKiDL / PySpice などの関連ライブラリを実行できる環境
 
-### Python依存関係
+### Python 依存関係
 
 ```bash
-pip install cadquery skidl PySpice schemdraw numpy matplotlib numpy-stl
+pip install -r requirements.txt
 ```
 
 ### システム依存関係
@@ -34,114 +48,78 @@ brew install openscad ngspice
 sudo apt install openscad ngspice
 ```
 
-### プラグインのインストール
+### Codex で使う
 
-#### 方法1: GitHubから直接インストール（推奨）
+Codex でこのリポジトリのスキルを読み込ませる場合は、`skills/` 配下を `~/.codex/skills` にリンクします。
 
-Claude Code内で以下のコマンドを実行します：
-
-```
-/plugin marketplace add https://github.com/koizumikento/engineering-design-plugin.git
-```
-
-マーケットプレースが追加されたら、プラグインをインストールします：
-
-```
-/plugin install engineering-design
-```
-
-#### 方法2: ローカルにクローンしてインストール
+repo-local discovery が必要な場合は、作業用 clone の中で `.agents/skills -> ../skills` のようなローカル symlink を作ってください。この管理リポジトリ自体には `.agents/skills` をコミットしていません。
 
 ```bash
-# リポジトリをクローン
-git clone https://github.com/koizumikento/engineering-design-plugin.git
-
-# Claude Codeでプラグインディレクトリを指定
-cd engineering-design-plugin
+./scripts/link_codex_skills.sh
 ```
 
-Claude Code内でローカルマーケットプレースとして追加：
+確認だけしたい場合:
 
-```
-/plugin marketplace add ./engineering-design-plugin
-/plugin install engineering-design
-```
-
-#### インストールの確認
-
-```
-/plugin list
+```bash
+./scripts/link_codex_skills.sh --dry-run
 ```
 
-インストール済みプラグインに `engineering-design` が表示されれば成功です。
+既存リンクを外す場合:
 
-## 使用方法
-
-### コマンド一覧
-
-| コマンド | 説明 |
-|---------|------|
-| `/engineering-design:spec` | 仕様書を生成 |
-| `/engineering-design:cad` | CadQueryコードを生成・実行 |
-| `/engineering-design:circuit` | SKiDLコードを生成・実行 |
-| `/engineering-design:simulate` | SPICEシミュレーション |
-| `/engineering-design:schematic` | 回路図を生成 |
-| `/engineering-design:preview` | 3Dプレビューを生成 |
-| `/engineering-design:integrate` | 統合設計チェック |
-
-### ワークフロー
-
-#### 機械設計
-
-```
-1. /engineering-design:spec 温度センサー用の防水筐体を設計して
-2. (仕様書を確認・承認)
-3. /engineering-design:cad specs/sensor-enclosure-spec.md
-4. /engineering-design:preview outputs/sensor-enclosure.step
+```bash
+./scripts/link_codex_skills.sh --remove
 ```
 
-#### 回路設計
+## 基本ワークフロー
 
-```
-1. /engineering-design:spec 5VでLED3個を駆動する回路
-2. (仕様書を確認・承認)
-3. /engineering-design:circuit specs/led-driver-spec.md
-4. /engineering-design:simulate src/led_driver.py --dc
-5. /engineering-design:schematic src/led_driver.py
+### 1. 仕様書を作る
+
+`spec-writing` を使って `templates/spec/` ベースの仕様書を `specs/` に生成します。
+
+```text
+温度センサー用の防水筐体の仕様書を作って
+spec-writing を使って ESP32 センサーデバイスの統合仕様をまとめて
 ```
 
-#### 統合設計（筐体+回路）
+### 2. 設計コードを作る
 
+- 機械設計は `mechanical-cad` を使って `scripts/cadquery_runner.py` で STEP/STL を生成
+- 回路設計は `circuit-design` を使って `scripts/skidl_runner.py --bom` でネットリスト/BOM を生成
+
+```text
+mechanical-cad を使って specs/sensor-enclosure-spec.md から CadQuery コードを生成して
+circuit-design を使って specs/led-driver-spec.md から SKiDL コードと BOM を生成して
 ```
-1. /engineering-design:spec ESP32を使った温湿度センサーデバイス
-2. (統合仕様書を確認・承認)
-3. /engineering-design:cad specs/iot-device-integrated-spec.md
-4. /engineering-design:circuit specs/iot-device-integrated-spec.md
-5. /engineering-design:integrate specs/iot-device-integrated-spec.md
-```
+
+### 3. 必要な追加出力を作る
+
+- 3D プレビュー: `scripts/preview_generator.py`
+- 回路図: `scripts/schemdraw_render.py`
+- SPICE シミュレーション: `scripts/pyspice_sim.py --dc|--ac|--tran`
+
+### 4. 統合チェックを行う
+
+`integration` を使って `scripts/integration_checker.py` で基板と筐体の整合性を確認します。
 
 ## ディレクトリ構造
 
-```
+```text
 engineering-design-plugin/
-├── .claude-plugin/
-│   └── plugin.json          # プラグイン設定
-├── commands/                 # スラッシュコマンド
-├── skills/                   # スキル定義
-│   ├── spec-writing/        # 仕様書作成
-│   ├── mechanical-cad/      # 機械設計
-│   ├── circuit-design/      # 回路設計
-│   └── integration/         # 統合設計
-├── hooks/                    # フック設定
-├── scripts/                  # 実行スクリプト
-├── templates/                # テンプレート
-│   ├── spec/                # 仕様書テンプレート
-│   ├── mechanical/          # 機械設計テンプレート
-│   └── circuit/             # 回路テンプレート
-└── examples/                 # サンプルプロジェクト
-    ├── sensor-enclosure/    # センサー筐体
-    ├── led-driver/          # LEDドライバ
-    └── iot-device/          # IoTデバイス
+├── skills/                   # エージェントが参照する主定義
+│   ├── spec-writing/
+│   │   ├── SKILL.md
+│   │   ├── agents/openai.yaml
+│   │   └── references/
+│   ├── mechanical-cad/
+│   ├── circuit-design/
+│   └── integration/
+├── .claude-plugin/           # Claude Code インストール用メタデータ
+├── scripts/                  # スキルから呼び出す実行スクリプト
+├── templates/                # 仕様書や設計テンプレート
+├── examples/                 # サンプルプロジェクト
+├── docs/                     # 設計メモと移行後の構成説明
+├── README.md
+└── LICENSE
 ```
 
 ## サンプルプロジェクト
@@ -166,7 +144,7 @@ python3 src/led_driver.py
 
 ### iot-device
 
-ESP32を使った温湿度センサーデバイス（筐体+回路の統合設計）
+ESP32 を使った温湿度センサーデバイス（筐体+回路の統合設計）
 
 ```bash
 cd examples/iot-device
@@ -174,27 +152,14 @@ python3 src/enclosure.py
 python3 src/circuit.py
 ```
 
-## スキル
-
-プラグインは以下のスキルを自動的に使用します：
-
-- **spec-writing**: 自然言語から仕様書を生成
-- **mechanical-cad**: CadQueryによる3Dモデル生成
-- **circuit-design**: SKiDLによる回路設計
-- **integration**: 基板-筐体の整合性チェック
-
 ## リファレンス
 
-- `skills/mechanical-cad/refs/cadquery-api.md` - CadQuery APIリファレンス
-- `skills/mechanical-cad/refs/jis-drawing.md` - JIS製図規格
-- `skills/circuit-design/refs/skidl-api.md` - SKiDL APIリファレンス
-- `skills/circuit-design/refs/circuit-patterns.md` - 回路パターン集
-- `skills/circuit-design/refs/spice-guide.md` - SPICEシミュレーションガイド
+- `skills/mechanical-cad/references/cadquery-api.md` - CadQuery API リファレンス
+- `skills/mechanical-cad/references/jis-drawing.md` - JIS 製図規格
+- `skills/circuit-design/references/skidl-api.md` - SKiDL API リファレンス
+- `skills/circuit-design/references/circuit-patterns.md` - 回路パターン集
+- `skills/circuit-design/references/spice-guide.md` - SPICE シミュレーションガイド
 
 ## ライセンス
 
 MIT License
-
-## 作者
-
-Koizumi

@@ -50,4 +50,4 @@
 - [x] PNG（プレビュー）
 
 ## 承認
-- [x] **仕様承認済み** - `/engineering-design:cad` でコード生成を実行
+- [x] **仕様承認済み** - `mechanical-cad` スキルでコード生成を実行

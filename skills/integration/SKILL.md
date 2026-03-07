@@ -20,7 +20,7 @@ allowed-tools: Read, Glob, Grep, Edit, Write, Bash
 
 2. **整合性チェック**
    ```bash
-   python3 ${CLAUDE_PLUGIN_ROOT}/scripts/integration_checker.py specs/integrated-spec.md
+   python3 scripts/integration_checker.py specs/[project-name]-integrated-spec.md -o outputs/
    ```
    - [ ] 基板外形と筐体内寸の適合性
    - [ ] コネクタ位置と開口部位置の一致
@@ -33,6 +33,11 @@ allowed-tools: Read, Glob, Grep, Edit, Write, Bash
 
 4. **レポート出力**
    - `outputs/[project-name]-integration-report.md`
+
+## 実行後の確認
+
+- [ ] クリアランス不足、穴位置ずれ、開口位置ずれがレポート化されている
+- [ ] 基板寸法、部品高さ、コネクタ位置の元データに齟齬がない
 
 ## 基板-筐体インターフェース定義
 
@@ -63,4 +68,4 @@ allowed-tools: Read, Glob, Grep, Edit, Write, Bash
 
 ## 詳細
 
-`refs/interface-spec.md`を参照
+`references/interface-spec.md`を参照

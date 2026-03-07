@@ -102,7 +102,7 @@
 ---
 
 ## 承認
-- [ ] **仕様承認済み** - 承認後に以下のコマンドを実行:
-  1. `/engineering-design:cad` - 筐体生成
-  2. `/engineering-design:circuit` - 回路生成
-  3. `/engineering-design:integrate` - 整合性チェック
+- [ ] **仕様承認済み** - 承認後に以下のスキルを順に実行:
+  1. `mechanical-cad` - 筐体生成
+  2. `circuit-design` - 回路生成
+  3. `integration` - 整合性チェック

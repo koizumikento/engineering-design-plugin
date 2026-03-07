@@ -1,0 +1,7 @@
+interface:
+  display_name: "Circuit Design"
+  short_description: "Generate SKiDL-based circuits, netlists, BOMs, schematics, and simulation outputs."
+  default_prompt: "Use this skill to turn an approved circuit specification into SKiDL code, run ERC, and generate the requested circuit artifacts."
+
+policy:
+  allow_implicit_invocation: true
