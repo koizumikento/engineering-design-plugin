@@ -193,6 +193,9 @@ def main():
         try:
             from skidl import set_default_tool, KICAD
             set_default_tool(KICAD)
+            import builtins
+
+            builtins.default_circuit._no_files = True
         except ImportError:
             print("Error: SKiDL is not installed. Run: uv sync", file=sys.stderr)
             sys.exit(1)

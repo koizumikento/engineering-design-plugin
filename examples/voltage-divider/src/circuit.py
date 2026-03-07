@@ -1,7 +1,7 @@
 """
-Non-inverting amplifier - SKiDL implementation.
+Voltage divider - SKiDL implementation.
 
-Specification: specs/non-inverting-amplifier-spec.md
+Specification: specs/voltage-divider-spec.md
 """
 
 import sys
@@ -24,11 +24,13 @@ except FileNotFoundError:
 default_circuit._no_files = True
 
 
-PROJECT_NAME = "non-inverting-amplifier"
-GAIN_TARGET = 11.0
-RI_OHMS = 10_000
-RF_OHMS = 100_000
-ACTUAL_GAIN = 1.0 + RF_OHMS / RI_OHMS
+PROJECT_NAME = "voltage-divider"
+VIN_NOMINAL = 5.0
+TARGET_VOUT = 3.3
+R1_OHMS = 1_000
+R2_OHMS = 2_000
+ACTUAL_VOUT = VIN_NOMINAL * R2_OHMS / (R1_OHMS + R2_OHMS)
+DIVIDER_CURRENT_MA = VIN_NOMINAL / (R1_OHMS + R2_OHMS) * 1_000
 
 
 def format_resistance(value_ohms: int) -> str:
@@ -46,75 +48,70 @@ default_circuit.name = PROJECT_NAME
 # Nets
 # -----------------------------------------------------------------------------
 
-vcc = Net("VCC")
-vee = Net("VEE")
-gnd = Net("GND")
 vin = Net("VIN")
 vout = Net("VOUT")
-inv_node = Net("INV_NODE")
+gnd = Net("GND")
 
-vcc.drive = POWER
-vee.drive = POWER
-gnd.drive = POWER
 vin.drive = Pin.drives.PASSIVE
+gnd.drive = POWER
 
 # -----------------------------------------------------------------------------
-# Amplifier core
+# External I/O
 # -----------------------------------------------------------------------------
 
-opamp = Part("Amplifier_Operational", "TL072", footprint="Package_DIP:DIP-8_W7.62mm", tag="u1_main")
-ri = Part("Device", "R", value=format_resistance(RI_OHMS), footprint="Resistor_SMD:R_0603_1608Metric", tag="r_gain_to_gnd")
-rf = Part("Device", "R", value=format_resistance(RF_OHMS), footprint="Resistor_SMD:R_0603_1608Metric", tag="r_feedback")
 vin_io = Part(
     "Connector_Generic",
     "Conn_01x01",
     footprint="Connector_PinHeader_2.54mm:PinHeader_1x01_P2.54mm_Vertical",
-    tag="j_signal_in",
+    tag="j_input",
 )
 vout_io = Part(
     "Connector_Generic",
     "Conn_01x01",
     footprint="Connector_PinHeader_2.54mm:PinHeader_1x01_P2.54mm_Vertical",
-    tag="j_signal_out",
+    tag="j_output",
+)
+gnd_io = Part(
+    "Connector_Generic",
+    "Conn_01x01",
+    footprint="Connector_PinHeader_2.54mm:PinHeader_1x01_P2.54mm_Vertical",
+    tag="j_ground",
 )
 
-vcc += opamp[8]
-vee += opamp[4]
-
 vin += vin_io[1]
-vin += opamp[3]
-gnd & ri & inv_node & rf & vout
-inv_node += opamp[2]
-vout += opamp[1]
 vout += vout_io[1]
+gnd += gnd_io[1]
 
 # -----------------------------------------------------------------------------
-# Terminate the unused second channel to keep the part electrically defined.
+# Divider network
 # -----------------------------------------------------------------------------
 
-unused_out = Net("UNUSED_OUT")
+r1 = Part(
+    "Device",
+    "R",
+    value=format_resistance(R1_OHMS),
+    footprint="Resistor_SMD:R_0603_1608Metric",
+    tag="r_top",
+)
+r2 = Part(
+    "Device",
+    "R",
+    value=format_resistance(R2_OHMS),
+    footprint="Resistor_SMD:R_0603_1608Metric",
+    tag="r_bottom",
+)
 
-gnd += opamp[5]
-opamp[6] += unused_out
-unused_out += opamp[7]
-
-# -----------------------------------------------------------------------------
-# Decoupling
-# -----------------------------------------------------------------------------
-
-c_pos = Part("Device", "C", value="100n", footprint="Capacitor_SMD:C_0603_1608Metric", tag="c_vcc_decouple")
-c_neg = Part("Device", "C", value="100n", footprint="Capacitor_SMD:C_0603_1608Metric", tag="c_vee_decouple")
-
-vcc & c_pos & gnd
-vee & c_neg & gnd
+vin & r1 & vout & r2 & gnd
 
 
 def print_summary() -> None:
-    print("=== Non-Inverting Amplifier ===")
-    print(f"Target gain: {GAIN_TARGET:.2f} V/V")
-    print(f"Actual gain: {ACTUAL_GAIN:.2f} V/V")
-    print(f"Ri: {format_resistance(RI_OHMS)}ohm")
-    print(f"Rf: {format_resistance(RF_OHMS)}ohm")
+    print("=== Voltage Divider ===")
+    print(f"Vin nominal: {VIN_NOMINAL:.2f} V")
+    print(f"Target Vout: {TARGET_VOUT:.2f} V")
+    print(f"Actual Vout: {ACTUAL_VOUT:.3f} V")
+    print(f"Divider current: {DIVIDER_CURRENT_MA:.2f} mA")
+    print(f"R1: {format_resistance(R1_OHMS)}ohm")
+    print(f"R2: {format_resistance(R2_OHMS)}ohm")
     print(f"Parts: {len(default_circuit.parts)}")
     print(f"Nets: {len(default_circuit.nets)}")
 

@@ -4,7 +4,24 @@ Inverting amplifier - SKiDL implementation.
 Specification: specs/inverting-amplifier-spec.md
 """
 
+import sys
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(REPO_ROOT / "skills" / "circuit-design" / "scripts"))
+
+from kicad_env import configure_kicad_env
+
+configure_kicad_env()
+
 from skidl import *
+from skidl.logger import stop_log_file_output
+
+try:
+    stop_log_file_output()
+except FileNotFoundError:
+    pass
+default_circuit._no_files = True
 
 
 PROJECT_NAME = "inverting-amplifier"

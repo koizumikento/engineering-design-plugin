@@ -150,6 +150,24 @@ cd examples/led-driver
 uv run python src/led_driver.py
 ```
 
+### rc-lowpass-filter
+
+1kHz の 1次 RC ローパスフィルタ。`VIN` / `VOUT` / `GND` を明示し、AC 特性の目安を表示する sample です。
+
+```bash
+uv run python examples/rc-lowpass-filter/src/circuit.py
+uv run python skills/circuit-design/scripts/skidl_runner.py examples/rc-lowpass-filter/src/circuit.py -o examples/rc-lowpass-filter/outputs
+```
+
+### voltage-divider
+
+5V から約 3.3V を得る 2 抵抗の分圧回路。後段が高インピーダンス入力であることを前提にした最小構成 sample です。
+
+```bash
+uv run python examples/voltage-divider/src/circuit.py
+uv run python skills/circuit-design/scripts/skidl_runner.py examples/voltage-divider/src/circuit.py -o examples/voltage-divider/outputs
+```
+
 ### non-inverting-amplifier
 
 TL072 を使った両電源の非反転増幅回路（ゲイン +11）。`KiCad v9` ネイティブ回路図と、外部 `VIN` / `VOUT` を明示した I/O 付きのサンプルです。
@@ -160,6 +178,26 @@ uv run python skills/circuit-design/scripts/kicad_sch_export.py examples/non-inv
 ```
 
 標準生成物は `outputs/reports/` に `-bom.csv`, `-erc-summary.md`, `-design-summary.md`、`outputs/kicad/[project-name]/` に `.kicad_sch`, `.kicad_pro` をまとめます。必要に応じて `--netlist` を追加します。
+
+### inverting-amplifier
+
+TL072 を使った両電源の反転増幅回路（ゲイン -10）。既存の非反転 sample と比較しやすい構成で、未使用チャネル終端とデカップリングも含みます。
+
+```bash
+uv run python examples/inverting-amplifier/src/circuit.py
+uv run python skills/circuit-design/scripts/skidl_runner.py examples/inverting-amplifier/src/circuit.py -o examples/inverting-amplifier/outputs
+```
+
+### linear-regulator
+
+`L7805` を使った 9V-15V 入力から 5V を生成する線形レギュレータ回路。入出力コネクタと安定化コンデンサを含む電源 sample です。
+
+```bash
+uv run python examples/linear-regulator/src/circuit.py
+uv run python skills/circuit-design/scripts/skidl_runner.py examples/linear-regulator/src/circuit.py -o examples/linear-regulator/outputs
+```
+
+`non-inverting-amplifier` 以外の新規回路は、現状の `kicad_sch_export.py` が未対応のため `.kicad_sch` / `.kicad_pro` はまだ生成できません。KiCad 正本が必要なら exporter を拡張します。
 
 ### iot-device
 

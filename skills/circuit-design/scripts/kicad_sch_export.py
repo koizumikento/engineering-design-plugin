@@ -12,7 +12,7 @@ import sys
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from circuit_artifacts import (
     collect_artifact_paths,
@@ -21,7 +21,7 @@ from circuit_artifacts import (
     write_design_summary,
 )
 from kicad_env import configure_kicad_env
-from skidl_utils import load_skidl_circuit
+from skidl_utils import load_skidl_circuit, suppress_skidl_file_output
 
 
 GRID = 2.54
@@ -169,6 +169,12 @@ class Point:
     y: float
 
 
+@dataclass(frozen=True)
+class SupportedDesign:
+    kind: str
+    data: Dict[str, Any]
+
+
 def local_to_sheet(origin: Point, dx: float, dy: float) -> Point:
     return Point(origin.x + dx, origin.y - dy)
 
@@ -237,10 +243,18 @@ def get_pin_number_map(part: Dict) -> Dict[str, str]:
     return {pin["num"]: pin["net"] for pin in part["pins"] if pin.get("net")}
 
 
+def part_matches(part: Dict, *, name: Optional[str] = None, value: Optional[str] = None) -> bool:
+    if name and part["name"].upper() != name.upper():
+        return False
+    if value and str(part["value"]).upper() != value.upper():
+        return False
+    return True
+
+
 def find_two_terminal_part(circuit_info: Dict, part_name: str, net_a: str, net_b: str) -> Optional[Dict]:
     target_nets = {net_a, net_b}
     for part in circuit_info["parts"]:
-        if part["name"].upper() != part_name.upper():
+        if not part_matches(part, name=part_name):
             continue
         nets = {pin["net"] for pin in part["pins"] if pin.get("net")}
         if len(nets) == 2 and nets == target_nets:
@@ -252,7 +266,7 @@ def find_single_pin_part(circuit_info: Dict, part_name: str, net_name: str, excl
     for part in circuit_info["parts"]:
         if exclude_ref and part["ref"] == exclude_ref:
             continue
-        if part["name"].upper() != part_name.upper():
+        if not part_matches(part, name=part_name):
             continue
         if len(part["pins"]) != 1:
             continue
@@ -262,9 +276,32 @@ def find_single_pin_part(circuit_info: Dict, part_name: str, net_name: str, excl
     return None
 
 
-def detect_non_inverting_amplifier(circuit_info: Dict) -> Optional[Dict]:
+def find_parts_between(circuit_info: Dict, part_name: str, net_a: str, net_b: str) -> List[Dict]:
+    target_nets = {net_a, net_b}
+    matches = []
     for part in circuit_info["parts"]:
-        if part["value"].upper() != "TL072":
+        if not part_matches(part, name=part_name):
+            continue
+        nets = {pin["net"] for pin in part["pins"] if pin.get("net")}
+        if len(nets) == 2 and nets == target_nets:
+            matches.append(part)
+    return matches
+
+
+def find_two_pin_connector(circuit_info: Dict, net_a: str, net_b: str) -> Optional[Dict]:
+    target_nets = {net_a, net_b}
+    for part in circuit_info["parts"]:
+        if not part_matches(part, name="Conn_01x02"):
+            continue
+        nets = {pin["net"] for pin in part["pins"] if pin.get("net")}
+        if nets == target_nets:
+            return part
+    return None
+
+
+def detect_opamp_amplifier(circuit_info: Dict) -> Optional[SupportedDesign]:
+    for part in circuit_info["parts"]:
+        if not part_matches(part, value="TL072"):
             continue
 
         pin_nets = get_pin_net_map(part)
@@ -272,45 +309,191 @@ def detect_non_inverting_amplifier(circuit_info: Dict) -> Optional[Dict]:
         vcc_net = pin_nums.get("8") or pin_nets.get("VCC") or pin_nets.get("V+")
         vee_net = pin_nums.get("4") or pin_nets.get("VEE") or pin_nets.get("V-")
         gnd_net = "GND" if any(net["name"] == "GND" for net in circuit_info["nets"]) else None
-        vin_net = pin_nums.get("3") or pin_nets.get("1+") or pin_nets.get("IN+")
+        plus_net = pin_nums.get("3") or pin_nets.get("1+") or pin_nets.get("IN+")
         inv_net = pin_nums.get("2") or pin_nets.get("1-") or pin_nets.get("IN-")
         vout_net = pin_nums.get("1") or pin_nets.get("1OUT") or pin_nets.get("OUT")
         unused_plus = pin_nums.get("5") or pin_nets.get("2+")
         unused_minus = pin_nums.get("6") or pin_nets.get("2-")
         unused_out = pin_nums.get("7") or pin_nets.get("2OUT")
 
-        if not all([vcc_net, vee_net, gnd_net, vin_net, inv_net, vout_net, unused_plus, unused_minus, unused_out]):
+        if not all([vcc_net, vee_net, gnd_net, plus_net, inv_net, vout_net, unused_plus, unused_minus, unused_out]):
             continue
 
-        ri = find_two_terminal_part(circuit_info, "R", gnd_net, inv_net)
+        non_inverting_ri = find_two_terminal_part(circuit_info, "R", gnd_net, inv_net)
         rf = find_two_terminal_part(circuit_info, "R", inv_net, vout_net)
         c_pos = find_two_terminal_part(circuit_info, "C", vcc_net, gnd_net)
         c_neg = find_two_terminal_part(circuit_info, "C", vee_net, gnd_net)
-        vin_io = find_single_pin_part(circuit_info, "Conn_01x01", vin_net, exclude_ref=part["ref"])
         vout_io = find_single_pin_part(circuit_info, "Conn_01x01", vout_net, exclude_ref=part["ref"])
 
-        if not all([ri, rf, c_pos, c_neg]):
+        if not all([rf, c_pos, c_neg]):
             continue
 
-        return {
-            "opamp": part,
-            "ri": ri,
-            "rf": rf,
-            "c_pos": c_pos,
-            "c_neg": c_neg,
-            "vcc_net": vcc_net,
-            "vee_net": vee_net,
-            "gnd_net": gnd_net,
-            "vin_net": vin_net,
-            "inv_net": inv_net,
-            "vout_net": vout_net,
-            "unused_plus_net": unused_plus,
-            "unused_minus_net": unused_minus,
-            "unused_out_net": unused_out,
-            "vin_io": vin_io,
-            "vout_io": vout_io,
-        }
+        if non_inverting_ri and plus_net != gnd_net:
+            vin_net = plus_net
+            return SupportedDesign(
+                kind="opamp_amplifier",
+                data={
+                    "mode": "non_inverting",
+                    "opamp": part,
+                    "ri": non_inverting_ri,
+                    "rf": rf,
+                    "c_pos": c_pos,
+                    "c_neg": c_neg,
+                    "vcc_net": vcc_net,
+                    "vee_net": vee_net,
+                    "gnd_net": gnd_net,
+                    "vin_net": vin_net,
+                    "inv_net": inv_net,
+                    "vout_net": vout_net,
+                    "unused_plus_net": unused_plus,
+                    "unused_minus_net": unused_minus,
+                    "unused_out_net": unused_out,
+                    "vin_io": find_single_pin_part(circuit_info, "Conn_01x01", vin_net, exclude_ref=part["ref"]),
+                    "vout_io": vout_io,
+                },
+            )
 
+        for candidate in find_parts_between(circuit_info, "R", inv_net, gnd_net):
+            if candidate["ref"] != rf["ref"]:
+                non_inverting_ri = candidate
+                break
+
+        input_resistor = None
+        vin_net = None
+        for candidate in circuit_info["parts"]:
+            if not part_matches(candidate, name="R") or candidate["ref"] == rf["ref"]:
+                continue
+            nets = {pin["net"] for pin in candidate["pins"] if pin.get("net")}
+            if inv_net not in nets or len(nets) != 2:
+                continue
+            other_net = next(net for net in nets if net != inv_net)
+            if other_net in {gnd_net, vcc_net, vee_net, vout_net, unused_out, unused_plus, unused_minus}:
+                continue
+            input_resistor = candidate
+            vin_net = other_net
+            break
+
+        if input_resistor and plus_net == gnd_net and vin_net:
+            return SupportedDesign(
+                kind="opamp_amplifier",
+                data={
+                    "mode": "inverting",
+                    "opamp": part,
+                    "ri": input_resistor,
+                    "rf": rf,
+                    "c_pos": c_pos,
+                    "c_neg": c_neg,
+                    "vcc_net": vcc_net,
+                    "vee_net": vee_net,
+                    "gnd_net": gnd_net,
+                    "vin_net": vin_net,
+                    "inv_net": inv_net,
+                    "vout_net": vout_net,
+                    "unused_plus_net": unused_plus,
+                    "unused_minus_net": unused_minus,
+                    "unused_out_net": unused_out,
+                    "vin_io": find_single_pin_part(circuit_info, "Conn_01x01", vin_net, exclude_ref=part["ref"]),
+                    "vout_io": vout_io,
+                },
+            )
+
+    return None
+
+
+def detect_voltage_divider(circuit_info: Dict) -> Optional[SupportedDesign]:
+    if not all(any(net["name"] == name for net in circuit_info["nets"]) for name in ("VIN", "VOUT", "GND")):
+        return None
+
+    r_top = find_two_terminal_part(circuit_info, "R", "VIN", "VOUT")
+    r_bottom = find_two_terminal_part(circuit_info, "R", "VOUT", "GND")
+    if not all([r_top, r_bottom]):
+        return None
+
+    return SupportedDesign(
+        kind="voltage_divider",
+        data={
+            "vin_net": "VIN",
+            "vout_net": "VOUT",
+            "gnd_net": "GND",
+            "r_top": r_top,
+            "r_bottom": r_bottom,
+            "vin_io": find_single_pin_part(circuit_info, "Conn_01x01", "VIN"),
+            "vout_io": find_single_pin_part(circuit_info, "Conn_01x01", "VOUT"),
+            "gnd_io": find_single_pin_part(circuit_info, "Conn_01x01", "GND"),
+        },
+    )
+
+
+def detect_rc_lowpass(circuit_info: Dict) -> Optional[SupportedDesign]:
+    if not all(any(net["name"] == name for net in circuit_info["nets"]) for name in ("VIN", "VOUT", "GND")):
+        return None
+
+    resistor = find_two_terminal_part(circuit_info, "R", "VIN", "VOUT")
+    capacitor = find_two_terminal_part(circuit_info, "C", "VOUT", "GND")
+    if not all([resistor, capacitor]):
+        return None
+
+    return SupportedDesign(
+        kind="rc_lowpass",
+        data={
+            "vin_net": "VIN",
+            "vout_net": "VOUT",
+            "gnd_net": "GND",
+            "resistor": resistor,
+            "capacitor": capacitor,
+            "vin_io": find_single_pin_part(circuit_info, "Conn_01x01", "VIN"),
+            "vout_io": find_single_pin_part(circuit_info, "Conn_01x01", "VOUT"),
+            "gnd_io": find_single_pin_part(circuit_info, "Conn_01x01", "GND"),
+        },
+    )
+
+
+def detect_linear_regulator(circuit_info: Dict) -> Optional[SupportedDesign]:
+    for part in circuit_info["parts"]:
+        if not part_matches(part, value="L7805"):
+            continue
+
+        pin_nets = get_pin_net_map(part)
+        pin_nums = get_pin_number_map(part)
+        vin_net = pin_nums.get("1") or pin_nets.get("IN")
+        gnd_net = pin_nums.get("2") or pin_nets.get("GND")
+        vout_net = pin_nums.get("3") or pin_nets.get("OUT")
+        if not all([vin_net, gnd_net, vout_net]):
+            continue
+
+        input_caps = find_parts_between(circuit_info, "C", vin_net, gnd_net)
+        output_caps = find_parts_between(circuit_info, "C", vout_net, gnd_net)
+        if not input_caps or not output_caps:
+            continue
+
+        return SupportedDesign(
+            kind="linear_regulator",
+            data={
+                "regulator": part,
+                "vin_net": vin_net,
+                "gnd_net": gnd_net,
+                "vout_net": vout_net,
+                "input_caps": sorted(input_caps, key=lambda p: p["ref"]),
+                "output_caps": sorted(output_caps, key=lambda p: p["ref"]),
+                "input_connector": find_two_pin_connector(circuit_info, vin_net, gnd_net),
+                "output_connector": find_two_pin_connector(circuit_info, vout_net, gnd_net),
+            },
+        )
+
+    return None
+
+
+def identify_supported_design(circuit_info: Dict) -> Optional[SupportedDesign]:
+    detectors = [
+        detect_opamp_amplifier,
+        detect_linear_regulator,
+        detect_voltage_divider,
+        detect_rc_lowpass,
+    ]
+    for detector in detectors:
+        design = detector(circuit_info)
+        if design:
+            return design
     return None
 
 
@@ -846,6 +1029,122 @@ def library_symbol_blocks():
 		)
         """,
         """
+		(symbol "Connector_Generic:Conn_01x02"
+			(pin_numbers
+				(hide yes)
+			)
+			(pin_names
+				(offset 1.016)
+				(hide yes)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(property "Reference" "J"
+				(at 0 3.81 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "Conn_01x02"
+				(at 0 -3.81 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Datasheet" "~"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Description" "Generic connector, single row, 2 pins"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "ki_keywords" "connector"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(symbol "Conn_01x02_1_1"
+				(rectangle
+					(start -1.27 2.54)
+					(end 1.27 -2.54)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(pin passive line
+					(at -5.08 1.27 0)
+					(length 3.81)
+					(name "Pin_1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at -5.08 -1.27 0)
+					(length 3.81)
+					(name "Pin_2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+        """,
+        """
 		(symbol "edp:R_H"
 			(pin_numbers
 				(hide yes)
@@ -1175,6 +1474,129 @@ def library_symbol_blocks():
 						)
 					)
 					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+        """,
+        """
+		(symbol "Regulator_Linear:L7805"
+			(pin_names
+				(offset 1.016)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(property "Reference" "U"
+				(at 0 6.35 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "L7805"
+				(at 0 -6.35 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Datasheet" "~"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Description" "Positive 5V linear regulator"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(symbol "L7805_0_1"
+				(rectangle
+					(start -5.08 3.81)
+					(end 5.08 -3.81)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type background)
+					)
+				)
+			)
+			(symbol "L7805_1_1"
+				(pin power_in line
+					(at -7.62 2.54 0)
+					(length 2.54)
+					(name "IN"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin power_in line
+					(at 0 -6.35 90)
+					(length 2.54)
+					(name "GND"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin power_out line
+					(at 7.62 2.54 180)
+					(length 2.54)
+					(name "OUT"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "3"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -1764,6 +2186,35 @@ def library_symbol_blocks():
     ]
 
 
+def start_schematic(output_path: Path) -> tuple[SchematicBuilder, str]:
+    project_name = output_path.stem
+    root_uuid = uid()
+    builder = SchematicBuilder(project_name, root_uuid)
+    builder.open("(kicad_sch")
+    builder.line("(version 20250114)")
+    builder.line('(generator "engineering-design-plugin")')
+    builder.line('(generator_version "0.1")')
+    builder.line(f'(uuid "{root_uuid}")')
+    builder.line('(paper "A4")')
+    builder.open("(title_block")
+    builder.line(f'(title "{esc(project_name)}")')
+    builder.close(")")
+    build_library_section(builder)
+    return builder, root_uuid
+
+
+def finish_schematic(builder: SchematicBuilder, output_path: Path) -> str:
+    builder.open("(sheet_instances")
+    builder.open('(path "/"')
+    builder.line('(page "1")')
+    builder.close(")")
+    builder.close(")")
+    builder.line("(embedded_fonts no)")
+    builder.close(")")
+    output_path.write_text(builder.render(), encoding="utf-8")
+    return str(output_path)
+
+
 def export_non_inverting_amplifier(design: Dict, output_path: Path) -> str:
     project_name = output_path.stem
     root_uuid = uid()
@@ -2089,6 +2540,593 @@ def export_non_inverting_amplifier(design: Dict, output_path: Path) -> str:
     return str(output_path)
 
 
+def export_inverting_amplifier(design: Dict, output_path: Path) -> str:
+    project_name = output_path.stem
+    root_uuid = uid()
+    builder = SchematicBuilder(project_name, root_uuid)
+
+    builder.open("(kicad_sch")
+    builder.line("(version 20250114)")
+    builder.line('(generator "engineering-design-plugin")')
+    builder.line('(generator_version "0.1")')
+    builder.line(f'(uuid "{root_uuid}")')
+    builder.line('(paper "A4")')
+    builder.open("(title_block")
+    builder.line(f'(title "{esc(project_name)}")')
+    builder.close(")")
+    build_library_section(builder)
+
+    u1a = Point(104.14, 88.9)
+    u1b = Point(104.14, 129.54)
+    u1p = Point(195.58, 109.22)
+
+    u1a_plus = local_to_sheet(u1a, -7.62, 2.54)
+    u1a_minus = local_to_sheet(u1a, -7.62, -2.54)
+    u1a_out = local_to_sheet(u1a, 7.62, 0)
+    u1b_plus = local_to_sheet(u1b, -7.62, 2.54)
+    u1b_minus = local_to_sheet(u1b, -7.62, -2.54)
+    u1b_out = local_to_sheet(u1b, 7.62, 0)
+    u1_vcc = local_to_sheet(u1p, -2.54, 7.62)
+    u1_vee = local_to_sheet(u1p, -2.54, -7.62)
+
+    sum_node = Point(86.36, u1a_minus.y)
+    vout_node = Point(132.08, u1a_out.y)
+    vin_io_origin = Point(50.8, u1a_minus.y)
+    vin_io_pin = Point(vin_io_origin.x + 5.08, vin_io_origin.y)
+    vout_io_origin = Point(160.02, vout_node.y)
+    vout_io_pin = Point(vout_io_origin.x - 5.08, vout_io_origin.y)
+
+    ri_origin = Point(68.58, u1a_minus.y)
+    ri_left = Point(ri_origin.x - 7.62, ri_origin.y)
+    ri_right = Point(ri_origin.x + 7.62, ri_origin.y)
+
+    rf_origin = Point(107.95, 71.12)
+    rf_left = Point(rf_origin.x - 3.81, rf_origin.y)
+    rf_right = Point(rf_origin.x + 3.81, rf_origin.y)
+
+    c1_origin = Point(180.34, 81.28)
+    c1_top = Point(c1_origin.x, c1_origin.y - 3.81)
+    c1_bottom = Point(c1_origin.x, c1_origin.y + 3.81)
+    c2_origin = Point(180.34, 127.0)
+    c2_top = Point(c2_origin.x, c2_origin.y - 3.81)
+    c2_bottom = Point(c2_origin.x, c2_origin.y + 3.81)
+
+    plus_gnd = Point(86.36, u1a_plus.y)
+    vcc_symbol = Point(193.04, 76.2)
+    vee_symbol = Point(193.04, 132.08)
+    gnd_u1b = Point(83.82, 127.0)
+    gnd_c1 = Point(180.34, 96.52)
+    gnd_c2 = Point(180.34, 111.76)
+
+    if design.get("vin_io"):
+        builder.symbol_instance(
+            lib_id="Connector_Generic:Conn_01x01",
+            at=vin_io_origin,
+            reference=design["vin_io"]["ref"],
+            value=design["vin_net"],
+            footprint=design["vin_io"]["footprint"],
+            description="External signal input",
+            pin_numbers=["1"],
+            ref_at=Point(vin_io_origin.x - 1.27, vin_io_origin.y - 4.445),
+            value_at=Point(vin_io_origin.x - 2.54, vin_io_origin.y + 4.445),
+            footprint_at=vin_io_origin,
+            rotation=180,
+        )
+        builder.wire(vin_io_pin, ri_left)
+    else:
+        builder.label(design["vin_net"], Point(53.34, vin_io_origin.y - 0.635), 0, "left bottom")
+        builder.wire(Point(58.42, vin_io_origin.y), ri_left)
+
+    builder.symbol_instance(
+        lib_id="edp:R_H",
+        at=ri_origin,
+        reference=design["ri"]["ref"],
+        value=design["ri"]["value"],
+        footprint=design["ri"]["footprint"],
+        description="Input resistor",
+        pin_numbers=["1", "2"],
+        ref_at=Point(ri_origin.x - 5.08, ri_origin.y - 5.08),
+        value_at=Point(ri_origin.x - 5.08, ri_origin.y + 4.445),
+        footprint_at=ri_origin,
+    )
+    builder.wire(ri_right, sum_node)
+    builder.wire(sum_node, u1a_minus)
+    builder.wire(sum_node, Point(sum_node.x, rf_left.y))
+    builder.wire(Point(sum_node.x, rf_left.y), rf_left)
+    builder.junction(sum_node)
+
+    builder.wire(u1a_plus, plus_gnd)
+    builder.symbol_instance(
+        lib_id="power:GND",
+        at=plus_gnd,
+        reference="#PWR0101",
+        value=design["gnd_net"],
+        footprint="",
+        description='Power symbol creates a global label with name "GND" , ground',
+        pin_numbers=["1"],
+        ref_at=Point(plus_gnd.x, plus_gnd.y + 5.08),
+        value_at=Point(plus_gnd.x, plus_gnd.y + 2.54),
+        footprint_at=plus_gnd,
+        ref_hidden=True,
+    )
+
+    builder.wire(u1a_out, vout_node)
+    if design.get("vout_io"):
+        builder.wire(vout_node, vout_io_pin)
+        builder.symbol_instance(
+            lib_id="Connector_Generic:Conn_01x01",
+            at=vout_io_origin,
+            reference=design["vout_io"]["ref"],
+            value=design["vout_net"],
+            footprint=design["vout_io"]["footprint"],
+            description="Amplifier output connector",
+            pin_numbers=["1"],
+            ref_at=Point(vout_io_origin.x - 1.27, vout_io_origin.y - 4.445),
+            value_at=Point(vout_io_origin.x - 1.27, vout_io_origin.y + 4.445),
+            footprint_at=vout_io_origin,
+            rotation=0,
+        )
+    else:
+        builder.wire(vout_node, Point(149.86, vout_node.y))
+        builder.label(design["vout_net"], Point(154.94, vout_node.y - 0.635), 0, "left bottom")
+    builder.wire(rf_right, Point(vout_node.x, rf_right.y))
+    builder.wire(Point(vout_node.x, rf_right.y), vout_node)
+    builder.junction(vout_node)
+
+    builder.symbol_instance(
+        lib_id="Amplifier_Operational:TL072",
+        at=u1a,
+        reference=design["opamp"]["ref"],
+        value=design["opamp"]["value"],
+        footprint=design["opamp"]["footprint"],
+        description="Dual low-noise JFET-input operational amplifier",
+        pin_numbers=["1", "2", "3"],
+        ref_at=Point(u1a.x - 10.16, u1a.y - 7.62),
+        value_at=Point(u1a.x - 10.16, u1a.y + 7.62),
+        footprint_at=u1a,
+        datasheet="http://www.ti.com/lit/ds/symlink/tl071.pdf",
+        unit=1,
+    )
+    builder.symbol_instance(
+        lib_id="Amplifier_Operational:TL072",
+        at=u1b,
+        reference=design["opamp"]["ref"],
+        value=design["opamp"]["value"],
+        footprint=design["opamp"]["footprint"],
+        description="Dual low-noise JFET-input operational amplifier",
+        pin_numbers=["5", "6", "7"],
+        ref_at=Point(u1b.x - 10.16, u1b.y - 7.62),
+        value_at=Point(u1b.x - 10.16, u1b.y + 7.62),
+        footprint_at=u1b,
+        datasheet="http://www.ti.com/lit/ds/symlink/tl071.pdf",
+        unit=2,
+        value_hidden=True,
+    )
+    builder.symbol_instance(
+        lib_id="Amplifier_Operational:TL072",
+        at=u1p,
+        reference=design["opamp"]["ref"],
+        value=design["opamp"]["value"],
+        footprint=design["opamp"]["footprint"],
+        description="Dual low-noise JFET-input operational amplifier",
+        pin_numbers=["4", "8"],
+        ref_at=Point(u1p.x + 8.89, u1p.y + 1.27),
+        value_at=Point(u1p.x - 5.08, u1p.y + 2.54),
+        footprint_at=u1p,
+        datasheet="http://www.ti.com/lit/ds/symlink/tl071.pdf",
+        unit=3,
+        ref_hidden=False,
+        value_hidden=True,
+    )
+    builder.symbol_instance(
+        lib_id="Device:R",
+        at=rf_origin,
+        reference=design["rf"]["ref"],
+        value=design["rf"]["value"],
+        footprint=design["rf"]["footprint"],
+        description="Feedback resistor",
+        pin_numbers=["1", "2"],
+        ref_at=Point(rf_origin.x - 2.54, rf_origin.y - 5.08),
+        value_at=Point(rf_origin.x - 2.54, rf_origin.y + 5.08),
+        footprint_at=rf_origin,
+        rotation=90,
+    )
+
+    builder.wire(u1b_out, Point(121.92, u1b_out.y))
+    builder.wire(Point(121.92, u1b_out.y), Point(121.92, u1b_minus.y))
+    builder.wire(Point(121.92, u1b_minus.y), u1b_minus)
+    builder.wire(u1b_plus, Point(gnd_u1b.x, u1b_plus.y))
+    builder.wire(Point(gnd_u1b.x, u1b_plus.y), Point(gnd_u1b.x, gnd_u1b.y - 2.54))
+    builder.symbol_instance(
+        lib_id="power:GND",
+        at=gnd_u1b,
+        reference="#PWR0102",
+        value=design["gnd_net"],
+        footprint="",
+        description='Power symbol creates a global label with name "GND" , ground',
+        pin_numbers=["1"],
+        ref_at=Point(gnd_u1b.x, gnd_u1b.y + 5.08),
+        value_at=Point(gnd_u1b.x, gnd_u1b.y + 2.54),
+        footprint_at=gnd_u1b,
+        ref_hidden=True,
+    )
+    builder.wire(Point(gnd_u1b.x, gnd_u1b.y - 2.54), gnd_u1b)
+
+    builder.wire(u1_vcc, Point(vcc_symbol.x, u1_vcc.y))
+    builder.wire(Point(vcc_symbol.x, u1_vcc.y), Point(vcc_symbol.x, vcc_symbol.y + 2.54))
+    builder.symbol_instance(
+        lib_id="power:VCC",
+        at=vcc_symbol,
+        reference="#PWR0103",
+        value=design["vcc_net"],
+        footprint="",
+        description='Power symbol creates a global label with name "VCC"',
+        pin_numbers=["1"],
+        ref_at=Point(vcc_symbol.x, vcc_symbol.y + 5.08),
+        value_at=Point(vcc_symbol.x, vcc_symbol.y - 2.54),
+        footprint_at=vcc_symbol,
+        ref_hidden=True,
+    )
+    builder.wire(Point(vcc_symbol.x, vcc_symbol.y + 2.54), vcc_symbol)
+
+    builder.wire(u1_vee, Point(vee_symbol.x, u1_vee.y))
+    builder.wire(Point(vee_symbol.x, u1_vee.y), Point(vee_symbol.x, vee_symbol.y - 2.54))
+    builder.symbol_instance(
+        lib_id="power:VEE",
+        at=vee_symbol,
+        reference="#PWR0104",
+        value=design["vee_net"],
+        footprint="",
+        description='Power symbol creates a global label with name "VEE"',
+        pin_numbers=["1"],
+        ref_at=Point(vee_symbol.x, vee_symbol.y + 5.08),
+        value_at=Point(vee_symbol.x, vee_symbol.y - 2.54),
+        footprint_at=vee_symbol,
+        ref_hidden=True,
+    )
+    builder.wire(Point(vee_symbol.x, vee_symbol.y - 2.54), vee_symbol)
+
+    builder.symbol_instance(
+        lib_id="Device:C",
+        at=c1_origin,
+        reference=design["c_pos"]["ref"],
+        value=design["c_pos"]["value"],
+        footprint=design["c_pos"]["footprint"],
+        description="Positive supply decoupling capacitor",
+        pin_numbers=["1", "2"],
+        ref_at=Point(c1_origin.x - 12.7, c1_origin.y - 1.27),
+        value_at=Point(c1_origin.x - 12.7, c1_origin.y - 6.35),
+        footprint_at=c1_origin,
+        rotation=0,
+    )
+    builder.wire(c1_top, Point(vcc_symbol.x, c1_top.y))
+    builder.wire(Point(vcc_symbol.x, c1_top.y), Point(vcc_symbol.x, vcc_symbol.y + 2.54))
+    builder.wire(c1_bottom, Point(gnd_c1.x, gnd_c1.y - 2.54))
+    builder.symbol_instance(
+        lib_id="power:GND",
+        at=gnd_c1,
+        reference="#PWR0105",
+        value=design["gnd_net"],
+        footprint="",
+        description='Power symbol creates a global label with name "GND" , ground',
+        pin_numbers=["1"],
+        ref_at=Point(gnd_c1.x, gnd_c1.y + 5.08),
+        value_at=Point(gnd_c1.x, gnd_c1.y + 2.54),
+        footprint_at=gnd_c1,
+        ref_hidden=True,
+    )
+    builder.wire(Point(gnd_c1.x, gnd_c1.y - 2.54), gnd_c1)
+
+    builder.symbol_instance(
+        lib_id="Device:C",
+        at=c2_origin,
+        reference=design["c_neg"]["ref"],
+        value=design["c_neg"]["value"],
+        footprint=design["c_neg"]["footprint"],
+        description="Negative supply decoupling capacitor",
+        pin_numbers=["1", "2"],
+        ref_at=Point(c2_origin.x - 12.7, c2_origin.y - 1.27),
+        value_at=Point(c2_origin.x - 12.7, c2_origin.y - 6.35),
+        footprint_at=c2_origin,
+        rotation=0,
+    )
+    builder.wire(c2_bottom, Point(vee_symbol.x, c2_bottom.y))
+    builder.wire(Point(vee_symbol.x, c2_bottom.y), Point(vee_symbol.x, vee_symbol.y - 2.54))
+    builder.wire(c2_top, Point(gnd_c2.x, gnd_c2.y - 2.54))
+    builder.symbol_instance(
+        lib_id="power:GND",
+        at=gnd_c2,
+        reference="#PWR0106",
+        value=design["gnd_net"],
+        footprint="",
+        description='Power symbol creates a global label with name "GND" , ground',
+        pin_numbers=["1"],
+        ref_at=Point(gnd_c2.x, gnd_c2.y + 5.08),
+        value_at=Point(gnd_c2.x, gnd_c2.y + 2.54),
+        footprint_at=gnd_c2,
+        ref_hidden=True,
+    )
+    builder.wire(Point(gnd_c2.x, gnd_c2.y - 2.54), gnd_c2)
+
+    builder.text("U1B parked as follower", Point(116.84, 147.32))
+    builder.open("(sheet_instances")
+    builder.open('(path "/"')
+    builder.line('(page "1")')
+    builder.close(")")
+    builder.close(")")
+    builder.line("(embedded_fonts no)")
+    builder.close(")")
+
+    output_path.write_text(builder.render(), encoding="utf-8")
+    return str(output_path)
+
+
+def export_passive_shunt_topology(design: Dict, output_path: Path, *, shunt_kind: str) -> str:
+    builder, _ = start_schematic(output_path)
+
+    vin_origin = Point(40.64, 88.9)
+    vin_pin = Point(vin_origin.x + 5.08, vin_origin.y)
+    vout_origin = Point(129.54, 88.9)
+    vout_pin = Point(vout_origin.x - 5.08, vout_origin.y)
+    gnd_origin = Point(40.64, 121.92)
+    gnd_pin = Point(gnd_origin.x + 5.08, gnd_origin.y)
+
+    series_origin = Point(71.12, 88.9)
+    series_left = Point(series_origin.x - 7.62, series_origin.y)
+    series_right = Point(series_origin.x + 7.62, series_origin.y)
+    node = Point(96.52, 88.9)
+    shunt_origin = Point(96.52, 104.14)
+    shunt_top = Point(shunt_origin.x, shunt_origin.y - 7.62)
+    shunt_bottom = Point(shunt_origin.x, shunt_origin.y + 7.62)
+    gnd_symbol = Point(96.52, 121.92)
+
+    if design.get("vin_io"):
+        builder.symbol_instance(
+            lib_id="Connector_Generic:Conn_01x01",
+            at=vin_origin,
+            reference=design["vin_io"]["ref"],
+            value=design["vin_net"],
+            footprint=design["vin_io"]["footprint"],
+            description="External input",
+            pin_numbers=["1"],
+            ref_at=Point(vin_origin.x - 1.27, vin_origin.y - 4.445),
+            value_at=Point(vin_origin.x - 2.54, vin_origin.y + 4.445),
+            footprint_at=vin_origin,
+            rotation=180,
+        )
+        builder.wire(vin_pin, series_left)
+    else:
+        builder.label(design["vin_net"], Point(48.26, vin_origin.y - 0.635))
+        builder.wire(Point(53.34, vin_origin.y), series_left)
+
+    if design.get("vout_io"):
+        builder.symbol_instance(
+            lib_id="Connector_Generic:Conn_01x01",
+            at=vout_origin,
+            reference=design["vout_io"]["ref"],
+            value=design["vout_net"],
+            footprint=design["vout_io"]["footprint"],
+            description="External output",
+            pin_numbers=["1"],
+            ref_at=Point(vout_origin.x - 1.27, vout_origin.y - 4.445),
+            value_at=Point(vout_origin.x - 1.27, vout_origin.y + 4.445),
+            footprint_at=vout_origin,
+            rotation=0,
+        )
+        builder.wire(node, vout_pin)
+    else:
+        builder.wire(node, Point(116.84, node.y))
+        builder.label(design["vout_net"], Point(121.92, node.y - 0.635))
+
+    if design.get("gnd_io"):
+        builder.symbol_instance(
+            lib_id="Connector_Generic:Conn_01x01",
+            at=gnd_origin,
+            reference=design["gnd_io"]["ref"],
+            value=design["gnd_net"],
+            footprint=design["gnd_io"]["footprint"],
+            description="Ground connection",
+            pin_numbers=["1"],
+            ref_at=Point(gnd_origin.x - 1.27, gnd_origin.y - 4.445),
+            value_at=Point(gnd_origin.x - 2.54, gnd_origin.y + 4.445),
+            footprint_at=gnd_origin,
+            rotation=180,
+        )
+        builder.wire(gnd_pin, gnd_symbol)
+
+    series_part = design["r_top"] if shunt_kind == "divider" else design["resistor"]
+    builder.symbol_instance(
+        lib_id="edp:R_H",
+        at=series_origin,
+        reference=series_part["ref"],
+        value=series_part["value"],
+        footprint=series_part["footprint"],
+        description="Series resistor",
+        pin_numbers=["1", "2"],
+        ref_at=Point(series_origin.x - 5.08, series_origin.y - 5.08),
+        value_at=Point(series_origin.x - 5.08, series_origin.y + 4.445),
+        footprint_at=series_origin,
+    )
+    builder.wire(series_right, node)
+    builder.junction(node)
+
+    shunt_part = design["r_bottom"] if shunt_kind == "divider" else design["capacitor"]
+    builder.symbol_instance(
+        lib_id="edp:R_V" if shunt_kind == "divider" else "edp:C_V",
+        at=shunt_origin,
+        reference=shunt_part["ref"],
+        value=shunt_part["value"],
+        footprint=shunt_part["footprint"],
+        description="Shunt resistor" if shunt_kind == "divider" else "Shunt capacitor",
+        pin_numbers=["1", "2"],
+        ref_at=Point(shunt_origin.x + 4.445, shunt_origin.y - 1.27),
+        value_at=Point(shunt_origin.x + 4.445, shunt_origin.y + 3.81),
+        footprint_at=shunt_origin,
+    )
+    builder.wire(node, shunt_top)
+    builder.wire(shunt_bottom, Point(shunt_bottom.x, gnd_symbol.y))
+    builder.symbol_instance(
+        lib_id="power:GND",
+        at=gnd_symbol,
+        reference="#PWR0101",
+        value=design["gnd_net"],
+        footprint="",
+        description='Power symbol creates a global label with name "GND" , ground',
+        pin_numbers=["1"],
+        ref_at=Point(gnd_symbol.x, gnd_symbol.y + 5.08),
+        value_at=Point(gnd_symbol.x, gnd_symbol.y + 2.54),
+        footprint_at=gnd_symbol,
+        ref_hidden=True,
+    )
+
+    return finish_schematic(builder, output_path)
+
+
+def export_linear_regulator(design: Dict, output_path: Path) -> str:
+    builder, _ = start_schematic(output_path)
+
+    input_conn = Point(35.56, 90.17)
+    input_pin_1 = Point(input_conn.x + 5.08, input_conn.y - 1.27)
+    input_pin_2 = Point(input_conn.x + 5.08, input_conn.y + 1.27)
+    output_conn = Point(132.08, 90.17)
+    output_pin_1 = Point(output_conn.x - 5.08, output_conn.y - 1.27)
+    output_pin_2 = Point(output_conn.x - 5.08, output_conn.y + 1.27)
+
+    reg_origin = Point(81.28, 91.44)
+    reg_in = local_to_sheet(reg_origin, -7.62, 2.54)
+    reg_out = local_to_sheet(reg_origin, 7.62, 2.54)
+    reg_gnd = local_to_sheet(reg_origin, 0, -6.35)
+
+    vin_bus_y = reg_in.y
+    vout_bus_y = reg_out.y
+    gnd_bus_y = 111.76
+
+    input_cap_x = [53.34, 63.5]
+    output_cap_x = [99.06, 109.22]
+
+    if design.get("input_connector"):
+        builder.symbol_instance(
+            lib_id="Connector_Generic:Conn_01x02",
+            at=input_conn,
+            reference=design["input_connector"]["ref"],
+            value=design["vin_net"],
+            footprint=design["input_connector"]["footprint"],
+            description="Input connector",
+            pin_numbers=["1", "2"],
+            ref_at=Point(input_conn.x - 1.27, input_conn.y - 6.35),
+            value_at=Point(input_conn.x - 2.54, input_conn.y + 6.35),
+            footprint_at=input_conn,
+            rotation=180,
+        )
+        builder.wire(input_pin_1, reg_in)
+        builder.wire(input_pin_2, Point(input_pin_2.x, gnd_bus_y))
+    else:
+        builder.label(design["vin_net"], Point(45.72, vin_bus_y - 0.635))
+        builder.wire(Point(50.8, vin_bus_y), reg_in)
+
+    if design.get("output_connector"):
+        builder.symbol_instance(
+            lib_id="Connector_Generic:Conn_01x02",
+            at=output_conn,
+            reference=design["output_connector"]["ref"],
+            value=design["vout_net"],
+            footprint=design["output_connector"]["footprint"],
+            description="Output connector",
+            pin_numbers=["1", "2"],
+            ref_at=Point(output_conn.x - 1.27, output_conn.y - 6.35),
+            value_at=Point(output_conn.x - 2.54, output_conn.y + 6.35),
+            footprint_at=output_conn,
+            rotation=0,
+        )
+        builder.wire(reg_out, output_pin_1)
+        builder.wire(output_pin_2, Point(output_pin_2.x, gnd_bus_y))
+    else:
+        builder.wire(reg_out, Point(119.38, reg_out.y))
+        builder.label(design["vout_net"], Point(121.92, reg_out.y - 0.635))
+
+    builder.symbol_instance(
+        lib_id="Regulator_Linear:L7805",
+        at=reg_origin,
+        reference=design["regulator"]["ref"],
+        value=design["regulator"]["value"],
+        footprint=design["regulator"]["footprint"],
+        description="Positive 5V linear regulator",
+        pin_numbers=["1", "2", "3"],
+        ref_at=Point(reg_origin.x - 5.08, reg_origin.y - 7.62),
+        value_at=Point(reg_origin.x - 5.08, reg_origin.y + 7.62),
+        footprint_at=reg_origin,
+    )
+    builder.wire(reg_gnd, Point(reg_gnd.x, gnd_bus_y))
+
+    for x_pos, capacitor in zip(input_cap_x, design["input_caps"]):
+        origin = Point(x_pos, vin_bus_y + 7.62)
+        top = Point(origin.x, origin.y - 7.62)
+        bottom = Point(origin.x, origin.y + 7.62)
+        builder.symbol_instance(
+            lib_id="edp:C_V",
+            at=origin,
+            reference=capacitor["ref"],
+            value=capacitor["value"],
+            footprint=capacitor["footprint"],
+            description="Input decoupling capacitor",
+            pin_numbers=["1", "2"],
+            ref_at=Point(origin.x + 4.445, origin.y - 1.27),
+            value_at=Point(origin.x + 4.445, origin.y + 3.81),
+            footprint_at=origin,
+        )
+        builder.wire(top, Point(top.x, vin_bus_y))
+        builder.wire(bottom, Point(bottom.x, gnd_bus_y))
+
+    for x_pos, capacitor in zip(output_cap_x, design["output_caps"]):
+        origin = Point(x_pos, vout_bus_y + 7.62)
+        top = Point(origin.x, origin.y - 7.62)
+        bottom = Point(origin.x, origin.y + 7.62)
+        builder.symbol_instance(
+            lib_id="edp:C_V",
+            at=origin,
+            reference=capacitor["ref"],
+            value=capacitor["value"],
+            footprint=capacitor["footprint"],
+            description="Output decoupling capacitor",
+            pin_numbers=["1", "2"],
+            ref_at=Point(origin.x + 4.445, origin.y - 1.27),
+            value_at=Point(origin.x + 4.445, origin.y + 3.81),
+            footprint_at=origin,
+        )
+        builder.wire(top, Point(top.x, vout_bus_y))
+        builder.wire(bottom, Point(bottom.x, gnd_bus_y))
+
+    builder.symbol_instance(
+        lib_id="power:GND",
+        at=Point(81.28, gnd_bus_y),
+        reference="#PWR0101",
+        value=design["gnd_net"],
+        footprint="",
+        description='Power symbol creates a global label with name "GND" , ground',
+        pin_numbers=["1"],
+        ref_at=Point(81.28, gnd_bus_y + 5.08),
+        value_at=Point(81.28, gnd_bus_y + 2.54),
+        footprint_at=Point(81.28, gnd_bus_y),
+        ref_hidden=True,
+    )
+
+    return finish_schematic(builder, output_path)
+
+
+def export_supported_design(design: SupportedDesign, output_path: Path) -> str:
+    if design.kind == "opamp_amplifier":
+        if design.data["mode"] == "non_inverting":
+            return export_non_inverting_amplifier(design.data, output_path)
+        return export_inverting_amplifier(design.data, output_path)
+    if design.kind == "voltage_divider":
+        return export_passive_shunt_topology(design.data, output_path, shunt_kind="divider")
+    if design.kind == "rc_lowpass":
+        return export_passive_shunt_topology(design.data, output_path, shunt_kind="lowpass")
+    if design.kind == "linear_regulator":
+        return export_linear_regulator(design.data, output_path)
+    raise ValueError(f"Unsupported design kind: {design.kind}")
+
+
 def write_project_file(output_path: Path) -> str:
     project_data = json.loads(json.dumps(PROJECT_TEMPLATE))
     project_data["meta"]["filename"] = output_path.name
@@ -2125,20 +3163,25 @@ def main():
             from skidl import KICAD, set_default_tool
 
             set_default_tool(KICAD)
+            suppress_skidl_file_output()
         except ImportError:
             print("Error: SKiDL is not installed. Run: uv sync", file=sys.stderr)
             sys.exit(1)
 
         circuit = load_skidl_circuit(args.script)
         circuit_info = analyze_circuit(circuit)
-        design = detect_non_inverting_amplifier(circuit_info)
+        design = identify_supported_design(circuit_info)
         if not design:
-            raise ValueError("KiCad schematic export currently supports the non-inverting TL072 amplifier topology used in the example.")
+            raise ValueError(
+                "KiCad schematic export could not map this circuit to a supported topology. "
+                "Supported topology families currently include voltage-divider, rc-lowpass, "
+                "L7805 linear regulator, and TL072 inverting/non-inverting amplifiers."
+            )
 
         schematic_path = project_dir / f"{base_name}.kicad_sch"
         project_path = project_dir / f"{base_name}.kicad_pro"
 
-        export_non_inverting_amplifier(design, schematic_path)
+        export_supported_design(design, schematic_path)
         write_project_file(project_path)
         result["exported_files"].extend([str(schematic_path), str(project_path)])
 

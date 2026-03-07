@@ -36,6 +36,24 @@ def stabilize_hierarchy_tags(circuit, script_path: Path) -> None:
     circuit.check_tags = types.MethodType(check_tags_without_root_warning, circuit)
 
 
+def suppress_skidl_file_output(circuit=None) -> None:
+    """Stop SKiDL from writing .log/.erc files into the current directory."""
+
+    from skidl.logger import stop_log_file_output
+
+    try:
+        stop_log_file_output()
+    except FileNotFoundError:
+        # Another caller may already have removed the logger's temp files.
+        pass
+
+    if circuit is None:
+        circuit = getattr(builtins, "default_circuit", None)
+
+    if circuit is not None:
+        setattr(circuit, "_no_files", True)
+
+
 def load_skidl_circuit(script_path: Path, module_name: str = "skidl_script"):
     """Load a SKiDL script and return the default circuit after normalization."""
 
@@ -49,4 +67,5 @@ def load_skidl_circuit(script_path: Path, module_name: str = "skidl_script"):
 
     circuit = builtins.default_circuit
     stabilize_hierarchy_tags(circuit, script_path)
+    suppress_skidl_file_output(circuit)
     return circuit
