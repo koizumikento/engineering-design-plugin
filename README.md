@@ -8,8 +8,8 @@
 
 - **仕様策定**: 自然言語要望から機械/回路/統合仕様書を生成
 - **機械設計**: CadQuery による 3D CAD モデル生成と STEP/STL 出力
-- **回路設計**: SKiDL による回路生成、ネットリスト/BOM 出力
-- **追加検証**: 回路図生成、SPICE シミュレーション、3D プレビュー生成
+- **回路設計**: SKiDL による回路生成、BOM、ERC summary、設計メモ、KiCad v9 正本回路図出力
+- **追加検証**: ネットリスト、SPICE シミュレーション、3D プレビュー生成
 - **統合設計**: 基板と筐体の整合性チェック
 
 ## 含まれるスキル
@@ -32,6 +32,7 @@
 - `uv`
 - Python 3.9 以上
 - CadQuery / SKiDL / PySpice などの関連ライブラリを実行できる環境
+- KiCad v9（ネイティブ回路図 `.kicad_sch` / `.kicad_pro` の生成とプレビューに使用）
 
 ### Python 依存関係
 
@@ -44,9 +45,11 @@ uv sync
 ```bash
 # macOS
 brew install openscad ngspice
+brew install --cask kicad
 
 # Ubuntu/Debian
 sudo apt install openscad ngspice
+sudo apt install kicad
 ```
 
 ### Codex で使う
@@ -85,18 +88,20 @@ spec-writing を使って ESP32 センサーデバイスの統合仕様をまと
 ### 2. 設計コードを作る
 
 - 機械設計は `mechanical-cad` を使って `scripts/cadquery_runner.py` で STEP/STL を生成
-- 回路設計は `circuit-design` を使って `scripts/skidl_runner.py --bom` でネットリスト/BOM を生成
+- 回路設計は `circuit-design` を使って `skills/circuit-design/scripts/skidl_runner.py` と `skills/circuit-design/scripts/kicad_sch_export.py` で BOM / ERC summary / 設計メモ / KiCad 正本を生成
 
 ```text
 mechanical-cad を使って specs/sensor-enclosure-spec.md から CadQuery コードを生成して
-circuit-design を使って specs/led-driver-spec.md から SKiDL コードと BOM を生成して
+circuit-design を使って specs/led-driver-spec.md から SKiDL コードと KiCad 正本を生成して
 ```
 
-### 3. 必要な追加出力を作る
+### 3. 任意の追加出力を作る
 
 - 3D プレビュー: `scripts/preview_generator.py`
-- 回路図: `scripts/schemdraw_render.py`
-- SPICE シミュレーション: `scripts/pyspice_sim.py --dc|--ac|--tran`
+- 必要時のみのネットリスト: `skills/circuit-design/scripts/skidl_runner.py --netlist`
+- SPICE シミュレーション: `skills/circuit-design/scripts/pyspice_sim.py --dc|--ac|--tran`
+- `skills/circuit-design/scripts/kicad_sch_export.py` はサポート済みトポロジーから KiCad v9 ネイティブ回路図を生成する。未対応回路はこの exporter を拡張する
+- `skills/circuit-design/scripts/kicad_env.py` は KiCad ライブラリ環境変数と `fp-lib-table` / `sym-lib-table` を初期化する
 
 ### 4. 統合チェックを行う
 
@@ -115,13 +120,15 @@ engineering-design-plugin/
 │   ├── circuit-design/
 │   └── integration/
 ├── .claude-plugin/           # Claude Code インストール用メタデータ
-├── scripts/                  # スキルから呼び出す実行スクリプト
+├── scripts/                  # 複数スキルで共有する実行スクリプト
 ├── templates/                # 仕様書や設計テンプレート
 ├── examples/                 # サンプルプロジェクト
 ├── docs/                     # 設計メモと移行後の構成説明
 ├── README.md
 └── LICENSE
 ```
+
+`circuit-design` 専用スクリプトは [skills/circuit-design/scripts](/Users/koizumikenjin/workspace/engineering-design-plugin/skills/circuit-design/scripts) に置き、共有物だけを repo 直下の [scripts](/Users/koizumikenjin/workspace/engineering-design-plugin/scripts) に残しています。
 
 ## サンプルプロジェクト
 
@@ -143,6 +150,17 @@ cd examples/led-driver
 uv run python src/led_driver.py
 ```
 
+### non-inverting-amplifier
+
+TL072 を使った両電源の非反転増幅回路（ゲイン +11）。`KiCad v9` ネイティブ回路図と、外部 `VIN` / `VOUT` を明示した I/O 付きのサンプルです。
+
+```bash
+uv run python skills/circuit-design/scripts/skidl_runner.py examples/non-inverting-amplifier/src/circuit.py -o examples/non-inverting-amplifier/outputs
+uv run python skills/circuit-design/scripts/kicad_sch_export.py examples/non-inverting-amplifier/src/circuit.py -o examples/non-inverting-amplifier/outputs
+```
+
+標準生成物は `outputs/reports/` に `-bom.csv`, `-erc-summary.md`, `-design-summary.md`、`outputs/kicad/[project-name]/` に `.kicad_sch`, `.kicad_pro` をまとめます。必要に応じて `--netlist` を追加します。
+
 ### iot-device
 
 ESP32 を使った温湿度センサーデバイス（筐体+回路の統合設計）
@@ -158,6 +176,7 @@ uv run python src/circuit.py
 - `skills/mechanical-cad/references/cadquery-api.md` - CadQuery API リファレンス
 - `skills/mechanical-cad/references/jis-drawing.md` - JIS 製図規格
 - `skills/circuit-design/references/skidl-api.md` - SKiDL API リファレンス
+- `skills/circuit-design/references/kicad-v9-workflow.md` - KiCad v9 ネイティブ運用メモ
 - `skills/circuit-design/references/circuit-patterns.md` - 回路パターン集
 - `skills/circuit-design/references/spice-guide.md` - SPICE シミュレーションガイド
 

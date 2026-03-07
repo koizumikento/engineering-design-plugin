@@ -35,7 +35,7 @@
       ↓
 [検証と追加出力]
       ↓
-[STEP/STL or Netlist/BOM/SVG/Simulation]
+[STEP/STL or Netlist/BOM/KiCad/Simulation]
 ```
 
 ### 統合設計
@@ -73,7 +73,8 @@ engineering-design-plugin/
 │   │   ├── SKILL.md
 │   │   ├── agents/
 │   │   │   └── openai.yaml
-│   │   └── references/
+│   │   ├── references/
+│   │   └── scripts/
 │   └── integration/
 │       ├── SKILL.md
 │       ├── agents/
@@ -84,9 +85,6 @@ engineering-design-plugin/
 │   └── marketplace.json
 ├── scripts/
 │   ├── cadquery_runner.py
-│   ├── skidl_runner.py
-│   ├── pyspice_sim.py
-│   ├── schemdraw_render.py
 │   ├── preview_generator.py
 │   ├── integration_checker.py
 │   └── link_codex_skills.sh
@@ -126,16 +124,23 @@ engineering-design-plugin/
 ### `circuit-design`
 
 - 入力: 仕様書または自然言語要望
-- 標準出力: ネットリスト, BOM
-- 追加出力: 回路図, シミュレーション結果
+- 標準出力: BOM, ERC summary, 設計メモ, KiCad v9 回路図/プロジェクト
+- 追加出力: ネットリスト, シミュレーション結果
 - 実行:
-  - `uv run python scripts/skidl_runner.py input.py -o outputs/ --bom`
-  - `uv run python scripts/schemdraw_render.py input.py -o outputs/`
-  - `uv run python scripts/pyspice_sim.py input.py -o outputs/ --dc|--ac|--tran`
+  - `uv run python skills/circuit-design/scripts/skidl_runner.py input.py -o outputs/`
+  - `uv run python skills/circuit-design/scripts/kicad_sch_export.py input.py -o outputs/`
+  - `uv run python skills/circuit-design/scripts/skidl_runner.py input.py -o outputs/ --netlist`（ネットリストが必要な場合のみ）
+  - `uv run python skills/circuit-design/scripts/pyspice_sim.py input.py -o outputs/ --dc|--ac|--tran`
+- 備考:
+  - 製造/PCB 連携の正本は `kicad_sch_export.py` とする
+  - 標準成果物は `outputs/reports/` にレポート類、`outputs/kicad/[project-name]/` に KiCad プロジェクト一式を分けて配置する
+  - `skills/circuit-design/scripts/skidl_runner.py` と `skills/circuit-design/scripts/kicad_sch_export.py` は `skills/circuit-design/scripts/skidl_utils.py` の共通ローダを使い、importlib 起因の root hierarchy node warning を抑える
+  - KiCad v9 exporter はサポート済みトポロジーから `.kicad_sch` / `.kicad_pro` を生成し、未対応回路は exporter 側にレイアウト/記号対応を追加する
+  - 外部 I/O ネットは必要に応じてコネクタやテストポイントとしてモデル化し、KiCad 図にも同じ境界要素を出す
 - 実行後確認:
   - `uv run python -m py_compile input.py`
   - `ERC()` の実行
-  - Netlist/BOM/SVG/CSV/PNG の生成確認
+  - BOM/ERC summary/設計メモ/`.kicad_sch`/`.kicad_pro` の生成確認
 
 ### `integration`
 

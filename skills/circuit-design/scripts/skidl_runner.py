@@ -1,32 +1,22 @@
 #!/usr/bin/env python3
 """
-SKiDL Runner - SKiDLスクリプトを実行し、ネットリストとBOMを出力
+SKiDL Runner - SKiDLスクリプトを実行し、BOMとサマリを出力
 
 使用方法:
     python3 skidl_runner.py input.py -o outputs/
-    python3 skidl_runner.py input.py -o outputs/ --bom
+    python3 skidl_runner.py input.py -o outputs/ --netlist
 """
 
 import argparse
-import importlib.util
+import builtins
 import json
 import sys
 from pathlib import Path
-from typing import Optional
 import csv
 
-
-def load_script(script_path: Path) -> None:
-    """SKiDLスクリプトを実行"""
-    spec = importlib.util.spec_from_file_location("skidl_script", script_path)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"Cannot load script: {script_path}")
-
-    module = importlib.util.module_from_spec(spec)
-    sys.modules["skidl_script"] = module
-
-    # スクリプト実行
-    spec.loader.exec_module(module)
+from circuit_artifacts import ensure_standard_output_dirs, write_design_summary, write_erc_summary
+from kicad_env import configure_kicad_env
+from skidl_utils import load_skidl_circuit
 
 
 def run_erc() -> dict:
@@ -82,9 +72,7 @@ def generate_netlist(output_path: Path, format: str = "kicad") -> str:
 
 def generate_bom(output_path: Path) -> str:
     """BOM（部品表）を生成"""
-    from skidl import default_circuit
-
-    circuit = default_circuit
+    circuit = builtins.default_circuit
 
     # 部品情報を収集
     parts_dict = {}
@@ -124,9 +112,7 @@ def generate_bom(output_path: Path) -> str:
 
 def get_circuit_info() -> dict:
     """回路情報を取得"""
-    from skidl import default_circuit
-
-    circuit = default_circuit
+    circuit = builtins.default_circuit
 
     info = {
         "name": circuit.name,
@@ -159,7 +145,7 @@ def get_circuit_info() -> dict:
 
 def main():
     parser = argparse.ArgumentParser(
-        description='SKiDLスクリプトを実行し、ネットリストとBOMを出力'
+        description='SKiDLスクリプトを実行し、BOMとサマリを出力'
     )
     parser.add_argument('script', type=Path, help='入力スクリプト（.py）')
     parser.add_argument('-o', '--output', type=Path, default=Path('outputs'),
@@ -167,7 +153,11 @@ def main():
     parser.add_argument('--name', type=str, default=None,
                         help='出力ファイル名（デフォルト: スクリプト名）')
     parser.add_argument('--bom', action='store_true',
-                        help='BOM（部品表）を生成')
+                        help='BOM（部品表）を生成（既定で生成されます）')
+    parser.add_argument('--no-bom', action='store_true',
+                        help='BOM（部品表）を生成しない')
+    parser.add_argument('--netlist', action='store_true',
+                        help='ネットリストを追加生成する')
     parser.add_argument('--no-erc', action='store_true',
                         help='ERCをスキップ')
     parser.add_argument('--json', action='store_true',
@@ -196,6 +186,9 @@ def main():
     }
 
     try:
+        report_dir, _ = ensure_standard_output_dirs(args.output, base_name)
+        configure_kicad_env()
+
         # SKiDLインポート確認
         try:
             from skidl import set_default_tool, KICAD
@@ -206,7 +199,7 @@ def main():
 
         # スクリプト実行
         print(f"Loading script: {args.script}")
-        load_script(args.script)
+        load_skidl_circuit(args.script)
 
         # 回路情報取得
         circuit_info = get_circuit_info()
@@ -231,20 +224,35 @@ def main():
             for warning in erc_result["warnings"]:
                 print(f"    WARNING: {warning}")
 
-        # ネットリスト生成
-        print(f"Generating netlist...")
-        netlist_path = args.output / f"{base_name}.net"
-        generate_netlist(netlist_path)
-        result_data["exported_files"].append(str(netlist_path))
-        print(f"  Created: {netlist_path}")
+        # ERC summary生成
+        if not args.no_erc:
+            print("Writing ERC summary...")
+            erc_summary_path = report_dir / f"{base_name}-erc-summary.md"
+            write_erc_summary(erc_summary_path, result_data["erc"])
+            result_data["exported_files"].append(str(erc_summary_path))
+            print(f"  Created: {erc_summary_path}")
 
         # BOM生成
-        if args.bom:
+        if not args.no_bom:
             print("Generating BOM...")
-            bom_path = args.output / f"{base_name}-bom.csv"
+            bom_path = report_dir / f"{base_name}-bom.csv"
             generate_bom(bom_path)
             result_data["exported_files"].append(str(bom_path))
             print(f"  Created: {bom_path}")
+
+        # ネットリスト生成
+        if args.netlist:
+            print("Generating netlist...")
+            netlist_path = report_dir / f"{base_name}.net"
+            generate_netlist(netlist_path)
+            result_data["exported_files"].append(str(netlist_path))
+            print(f"  Created: {netlist_path}")
+
+        print("Writing design summary...")
+        design_summary_path = report_dir / f"{base_name}-design-summary.md"
+        write_design_summary(design_summary_path, args.script, circuit_info, result_data["erc"], result_data["exported_files"])
+        result_data["exported_files"].append(str(design_summary_path))
+        print(f"  Created: {design_summary_path}")
 
         # 成功
         print("\nDone!")

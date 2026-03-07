@@ -3,3 +3,11 @@ __pycache__/
 .venv/
 outputs/*
 .DS_Store
+*.log
+*.erc
+*.net
+*.csv
+*.svg
+*_sklib.py
+
+examples/*/outputs/*

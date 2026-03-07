@@ -9,7 +9,6 @@ dependencies = [
     "numpy>=1.20",
     "numpy-stl>=2.16",
     "PySpice>=1.5",
-    "schemdraw>=0.22",
     "skidl>=1.2",
 ]
 

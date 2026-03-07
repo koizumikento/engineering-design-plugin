@@ -1,7 +1,7 @@
 interface:
   display_name: "Circuit Design"
-  short_description: "Generate SKiDL-based circuits, netlists, BOMs, schematics, and simulation outputs."
-  default_prompt: "Use this skill to turn an approved circuit specification into SKiDL code, run ERC, and generate the requested circuit artifacts."
+  short_description: "Generate SKiDL-based circuits, BOMs, ERC/design summaries, KiCad-native schematics, and simulation outputs."
+  default_prompt: "Use this skill to turn an approved circuit specification into SKiDL code, run ERC, and generate the standard circuit artifacts: BOM, ERC summary, design summary, and KiCad v9-native schematic/project files."
 
 policy:
   allow_implicit_invocation: true
