@@ -1,0 +1,6 @@
+{
+  "name": "engineering-design",
+  "version": "1.0.0",
+  "description": "Engineering design skills for specification writing, mechanical CAD, circuit design, and system integration.",
+  "skills": "./skills/"
+}

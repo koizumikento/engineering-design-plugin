@@ -4,6 +4,8 @@
 
 このリポジトリでは `skills/` を正本とし、エージェントが読むべき運用知識は `SKILL.md` と `references/`、`templates/`、`scripts/` に集約しています。OpenAI/Codex 向けのメタデータは各スキルの `agents/openai.yaml` に置き、Claude Code 向けにはインストール用メタデータとして `.claude-plugin/` を残しています。
 
+Codex plugin 対応では、この repo 自体を plugin root として扱います。`.codex-plugin/plugin.json` から `./skills/` を指し、既存の `skills/` 構成をそのまま配布対象にします。.claude-plugin/ はそのまま残し、repo ルートに Codex と Claude の両 manifest を共存させます。
+
 ## できること
 
 - **仕様策定**: 自然言語要望から機械/回路/統合仕様書を生成
@@ -74,6 +76,17 @@ repo-local discovery が必要な場合は、作業用 clone の中で `.agents/
 ./scripts/link_codex_skills.sh --remove
 ```
 
+### Codex plugin として使う
+
+この repo は repo ルートを plugin root としてそのまま扱えるようにしています。
+
+- 必須 manifest: `.codex-plugin/plugin.json`
+- bundled skills: `./skills/`
+- source-of-truth: `skills/*/SKILL.md`
+- Claude Code 互換: `.claude-plugin/` を同じ repo ルートに維持
+
+repo-local の Codex marketplace は `.agents/plugins/marketplace.json` に置き、`source.path` を `./` にしてこの repo ルートをそのまま plugin directory として参照します。これで `skills/` の複製や `plugins/` 配下への再配置なしに、Claude Code plugin の構造も保てます。
+
 ## 基本ワークフロー
 
 ### 1. 仕様書を作る
@@ -111,6 +124,10 @@ circuit-design を使って specs/led-driver-spec.md から SKiDL コードと K
 
 ```text
 engineering-design-plugin/
+├── .agents/
+│   └── plugins/
+│       └── marketplace.json # Codex repo-local marketplace
+├── .codex-plugin/           # Codex plugin manifest
 ├── skills/                   # エージェントが参照する主定義
 │   ├── spec-writing/
 │   │   ├── SKILL.md
