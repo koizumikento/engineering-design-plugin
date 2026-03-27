@@ -24,8 +24,8 @@ This repository is the source-of-truth for the engineering design agent skills. 
 
 ## OpenAI/Codex notes
 
-- OpenAI/Codex scans repo-local skills from `.agents/skills`, but this management repository keeps `skills/` as the committed source of truth.
-- If repo-local discovery is needed in a working copy, create a local symlink such as `.agents/skills -> ../skills` rather than duplicating the skill directories.
+- This repository is packaged as a Codex plugin from the repo root via `.codex-plugin/plugin.json`.
+- Use `.agents/plugins/marketplace.json` for repo-local Codex installation metadata instead of repo-local skill symlinks.
 - Use `agents/openai.yaml` only for metadata and invocation behavior. Keep operational instructions in `SKILL.md`.
 
 ## Validation

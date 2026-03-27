@@ -54,28 +54,6 @@ sudo apt install openscad ngspice
 sudo apt install kicad
 ```
 
-### Codex で使う
-
-Codex でこのリポジトリのスキルを読み込ませる場合は、`skills/` 配下を `~/.codex/skills` にリンクします。
-
-repo-local discovery が必要な場合は、作業用 clone の中で `.agents/skills -> ../skills` のようなローカル symlink を作ってください。この管理リポジトリ自体には `.agents/skills` をコミットしていません。
-
-```bash
-./scripts/link_codex_skills.sh
-```
-
-確認だけしたい場合:
-
-```bash
-./scripts/link_codex_skills.sh --dry-run
-```
-
-既存リンクを外す場合:
-
-```bash
-./scripts/link_codex_skills.sh --remove
-```
-
 ### Codex plugin として使う
 
 この repo は repo ルートを plugin root としてそのまま扱えるようにしています。
@@ -85,7 +63,28 @@ repo-local discovery が必要な場合は、作業用 clone の中で `.agents/
 - source-of-truth: `skills/*/SKILL.md`
 - Claude Code 互換: `.claude-plugin/` を同じ repo ルートに維持
 
-repo-local の Codex marketplace は `.agents/plugins/marketplace.json` に置き、`source.path` を `./` にしてこの repo ルートをそのまま plugin directory として参照します。これで `skills/` の複製や `plugins/` 配下への再配置なしに、Claude Code plugin の構造も保てます。
+他の作業 repo でも使いたい場合は、この repo を clone して install script を実行します。
+
+```bash
+git clone https://github.com/koizumikento/engineering-design-plugin.git
+cd engineering-design-plugin
+./scripts/install_codex_plugin.sh
+```
+
+この script は次を自動で行います。
+
+- `~/.codex/plugins/engineering-design` への personal plugin copy
+- `~/.agents/plugins/marketplace.json` の `engineering-design` entry の追加または更新
+
+既存の marketplace entry が別 path を向いている場合や、install 先 directory がこの installer 管理外だった場合は、上書きせずに fail します。
+
+設定後に Codex を再起動し、Plugin Directory の `local-personal` marketplace に出る `Engineering Design` を `+` で install します。
+
+不要になったら次で personal install を削除できます。
+
+```bash
+./scripts/uninstall_codex_plugin.sh
+```
 
 ## 基本ワークフロー
 
