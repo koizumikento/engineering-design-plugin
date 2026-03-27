@@ -483,9 +483,177 @@ def detect_linear_regulator(circuit_info: Dict) -> Optional[SupportedDesign]:
     return None
 
 
+def detect_comet_led_sequencer(circuit_info: Dict) -> Optional[SupportedDesign]:
+    required_nets = {"VCC", "GND", "CLOCK", "RESET", "TIMING", "DISCHARGE", "CARRY_OUT"}
+    available_nets = {net["name"] for net in circuit_info["nets"]}
+    if not required_nets.issubset(available_nets):
+        return None
+
+    timer = next((part for part in circuit_info["parts"] if part_matches(part, value="NE555P")), None)
+    counter = next((part for part in circuit_info["parts"] if part_matches(part, value="4017")), None)
+    potentiometer = next((part for part in circuit_info["parts"] if part_matches(part, name="R_Potentiometer")), None)
+    reset_switch = next((part for part in circuit_info["parts"] if part_matches(part, name="SW_Push")), None)
+
+    if not all([timer, counter, potentiometer, reset_switch]):
+        return None
+
+    timer_pins = get_pin_number_map(timer)
+    counter_pins = get_pin_number_map(counter)
+
+    if timer_pins.get("8") != "VCC" or timer_pins.get("1") != "GND":
+        return None
+    if timer_pins.get("4") != "VCC" or timer_pins.get("3") != "CLOCK":
+        return None
+    if timer_pins.get("7") != "DISCHARGE":
+        return None
+    if {timer_pins.get("6"), timer_pins.get("2")} != {"TIMING"}:
+        return None
+
+    control_net = timer_pins.get("5")
+    if not control_net:
+        return None
+
+    expected_counter_pins = {
+        "16": "VCC",
+        "8": "GND",
+        "14": "CLOCK",
+        "13": "GND",
+        "15": "RESET",
+        "12": "CARRY_OUT",
+    }
+    if any(counter_pins.get(pin) != net_name for pin, net_name in expected_counter_pins.items()):
+        return None
+
+    for index, pin_number in enumerate(("3", "2", "4", "7", "10", "1", "5", "6", "9", "11")):
+        if counter_pins.get(pin_number) != f"LED_STEP_{index}":
+            return None
+
+    potentiometer_pin_map = {pin["num"]: pin["net"] for pin in potentiometer["pins"] if pin.get("net")}
+    pot_drive_net = potentiometer_pin_map.get("1")
+    if not pot_drive_net or pot_drive_net in {"VCC", "GND", "TIMING", "DISCHARGE"}:
+        return None
+
+    power_connector = find_two_pin_connector(circuit_info, "VCC", "GND")
+    carry_connector = find_single_pin_part(circuit_info, "Conn_01x01", "CARRY_OUT")
+    charge_resistor = find_two_terminal_part(circuit_info, "R", "VCC", "DISCHARGE")
+    speed_resistor = find_two_terminal_part(circuit_info, "R", "DISCHARGE", pot_drive_net)
+    timing_capacitor = find_two_terminal_part(circuit_info, "C", "TIMING", "GND")
+    control_capacitor = find_two_terminal_part(circuit_info, "C", control_net, "GND")
+    reset_pull = find_two_terminal_part(circuit_info, "R", "RESET", "GND")
+
+    if not all(
+        [
+            power_connector,
+            carry_connector,
+            charge_resistor,
+            speed_resistor,
+            timing_capacitor,
+            control_capacitor,
+            reset_pull,
+        ]
+    ):
+        return None
+
+    reset_switch_nets = {pin["net"] for pin in reset_switch["pins"] if pin.get("net")}
+    if reset_switch_nets != {"VCC", "RESET"}:
+        return None
+
+    potentiometer_nets = {pin["net"] for pin in potentiometer["pins"] if pin.get("net")}
+    if potentiometer_nets != {pot_drive_net, "TIMING"}:
+        return None
+
+    vcc_caps = [
+        capacitor
+        for capacitor in find_parts_between(circuit_info, "C", "VCC", "GND")
+        if capacitor["ref"] not in {timing_capacitor["ref"], control_capacitor["ref"]}
+    ]
+    if len(vcc_caps) < 3:
+        return None
+
+    bulk_capacitor = next((capacitor for capacitor in vcc_caps if str(capacitor["value"]).lower() != "100n"), None)
+    if bulk_capacitor is None:
+        bulk_capacitor = sorted(vcc_caps, key=lambda capacitor: capacitor["ref"])[0]
+
+    decoupling_caps = sorted(
+        [capacitor for capacitor in vcc_caps if capacitor["ref"] != bulk_capacitor["ref"]],
+        key=lambda capacitor: capacitor["ref"],
+    )
+    if len(decoupling_caps) < 2:
+        return None
+
+    reserved_resistors = {charge_resistor["ref"], speed_resistor["ref"], reset_pull["ref"]}
+    used_leds = set()
+    led_channels = []
+
+    for index in range(10):
+        step_net = f"LED_STEP_{index}"
+        led_resistor = None
+        led_part = None
+        intermediate_net = None
+
+        for candidate in circuit_info["parts"]:
+            if not part_matches(candidate, name="R") or candidate["ref"] in reserved_resistors:
+                continue
+            nets = {pin["net"] for pin in candidate["pins"] if pin.get("net")}
+            if step_net not in nets or len(nets) != 2:
+                continue
+            other_net = next(net for net in nets if net != step_net)
+            led_candidate = find_two_terminal_part(circuit_info, "LED", other_net, "GND")
+            if led_candidate and led_candidate["ref"] not in used_leds:
+                led_resistor = candidate
+                led_part = led_candidate
+                intermediate_net = other_net
+                break
+
+        if not all([led_resistor, led_part, intermediate_net]):
+            return None
+
+        reserved_resistors.add(led_resistor["ref"])
+        used_leds.add(led_part["ref"])
+        led_channels.append(
+            {
+                "step_net": step_net,
+                "resistor": led_resistor,
+                "led": led_part,
+                "intermediate_net": intermediate_net,
+            }
+        )
+
+    return SupportedDesign(
+        kind="comet_led_sequencer",
+        data={
+            "timer": timer,
+            "counter": counter,
+            "power_connector": power_connector,
+            "carry_connector": carry_connector,
+            "bulk_capacitor": bulk_capacitor,
+            "timer_decoupling": decoupling_caps[0],
+            "counter_decoupling": decoupling_caps[1],
+            "charge_resistor": charge_resistor,
+            "speed_resistor": speed_resistor,
+            "potentiometer": potentiometer,
+            "timing_capacitor": timing_capacitor,
+            "control_capacitor": control_capacitor,
+            "reset_pull": reset_pull,
+            "reset_switch": reset_switch,
+            "led_channels": led_channels,
+            "vcc_net": "VCC",
+            "gnd_net": "GND",
+            "clock_net": "CLOCK",
+            "reset_net": "RESET",
+            "timing_net": "TIMING",
+            "discharge_net": "DISCHARGE",
+            "carry_net": "CARRY_OUT",
+            "control_net": control_net,
+            "pot_drive_net": pot_drive_net,
+        },
+    )
+
+
 def identify_supported_design(circuit_info: Dict) -> Optional[SupportedDesign]:
     detectors = [
         detect_opamp_amplifier,
+        detect_comet_led_sequencer,
         detect_linear_regulator,
         detect_voltage_divider,
         detect_rc_lowpass,
@@ -1839,6 +2007,1025 @@ def library_symbol_blocks():
 		)
         """,
         """
+		(symbol "Timer:NE555P"
+			(pin_names
+				(offset 1.016)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(property "Reference" "U"
+				(at 0 13.97 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "NE555P"
+				(at 0 -13.97 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Datasheet" "http://www.ti.com/lit/ds/symlink/ne555.pdf"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Description" "Precision timer, 555 compatible, PDIP-8"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(symbol "NE555P_0_1"
+				(rectangle
+					(start -7.62 10.16)
+					(end 7.62 -10.16)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type background)
+					)
+				)
+			)
+			(symbol "NE555P_1_1"
+				(pin input line
+					(at -10.16 7.62 0)
+					(length 2.54)
+					(name "~RST"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "4"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin input line
+					(at -10.16 2.54 0)
+					(length 2.54)
+					(name "THRES"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "6"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin input line
+					(at -10.16 -2.54 0)
+					(length 2.54)
+					(name "TRIG"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin input line
+					(at -10.16 -7.62 0)
+					(length 2.54)
+					(name "CONT"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "5"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 10.16 7.62 180)
+					(length 2.54)
+					(name "DISCH"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "7"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin output line
+					(at 10.16 0 180)
+					(length 2.54)
+					(name "OUT"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "3"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin power_in line
+					(at 0 12.7 270)
+					(length 2.54)
+					(name "VCC"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "8"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin power_in line
+					(at 0 -12.7 90)
+					(length 2.54)
+					(name "GND"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+        """,
+        """
+		(symbol "4xxx_IEEE:4017"
+			(pin_names
+				(offset 1.016)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(property "Reference" "U"
+				(at 0 31.75 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "4017"
+				(at 0 -31.75 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Datasheet" "~"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Description" "CMOS decade counter and decoder"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(symbol "4017_0_1"
+				(rectangle
+					(start -12.7 27.94)
+					(end 12.7 -27.94)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type background)
+					)
+				)
+			)
+			(symbol "4017_1_1"
+				(pin input line
+					(at -15.24 20.32 0)
+					(length 2.54)
+					(name "CP0"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "14"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin input line
+					(at -15.24 15.24 0)
+					(length 2.54)
+					(name "~CP1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "13"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin input line
+					(at -15.24 10.16 0)
+					(length 2.54)
+					(name "MR"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "15"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin output line
+					(at -15.24 0 0)
+					(length 2.54)
+					(name "Co"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "12"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin power_in line
+					(at 0 33.02 270)
+					(length 5.08)
+					(name "VDD"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "16"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin power_in line
+					(at 0 -33.02 90)
+					(length 5.08)
+					(name "VSS"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "8"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin output line
+					(at 15.24 22.86 180)
+					(length 2.54)
+					(name "Q0"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "3"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin output line
+					(at 15.24 17.78 180)
+					(length 2.54)
+					(name "Q1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin output line
+					(at 15.24 12.7 180)
+					(length 2.54)
+					(name "Q2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "4"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin output line
+					(at 15.24 7.62 180)
+					(length 2.54)
+					(name "Q3"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "7"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin output line
+					(at 15.24 2.54 180)
+					(length 2.54)
+					(name "Q4"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "10"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin output line
+					(at 15.24 -2.54 180)
+					(length 2.54)
+					(name "Q5"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin output line
+					(at 15.24 -7.62 180)
+					(length 2.54)
+					(name "Q6"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "5"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin output line
+					(at 15.24 -12.7 180)
+					(length 2.54)
+					(name "Q7"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "6"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin output line
+					(at 15.24 -17.78 180)
+					(length 2.54)
+					(name "Q8"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "9"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin output line
+					(at 15.24 -22.86 180)
+					(length 2.54)
+					(name "Q9"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "11"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+        """,
+        """
+		(symbol "Device:LED"
+			(pin_names
+				(offset 0.508)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(property "Reference" "D"
+				(at 3.81 0 90)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "LED"
+				(at -3.81 0 90)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Datasheet" "~"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Description" "Light emitting diode"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(symbol "LED_0_1"
+				(polyline
+					(pts
+						(xy -2.54 1.27) (xy 0 -1.27) (xy 2.54 1.27) (xy -2.54 1.27)
+					)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy -2.54 -1.27) (xy 2.54 -1.27)
+					)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 2.286 2.794) (xy 4.064 4.572)
+					)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 4.064 2.794) (xy 4.064 4.572) (xy 2.286 4.572)
+					)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 0.762 1.524) (xy 2.54 3.302)
+					)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 2.54 1.524) (xy 2.54 3.302) (xy 0.762 3.302)
+					)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(symbol "LED_1_1"
+				(pin passive line
+					(at 0 7.62 270)
+					(length 5.08)
+					(name "A"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 0 -7.62 90)
+					(length 5.08)
+					(name "K"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+        """,
+        """
+		(symbol "Device:R_Potentiometer"
+			(pin_numbers
+				(hide yes)
+			)
+			(pin_names
+				(offset 0)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(property "Reference" "RV"
+				(at 3.81 0 90)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "R_Potentiometer"
+				(at -3.81 0 90)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Datasheet" "~"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Description" "Potentiometer"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(symbol "R_Potentiometer_0_1"
+				(polyline
+					(pts
+						(xy 0 7.62) (xy 1.27 6.35) (xy -1.27 5.08) (xy 1.27 3.81) (xy -1.27 2.54) (xy 1.27 1.27) (xy -1.27 0) (xy 1.27 -1.27) (xy -1.27 -2.54) (xy 1.27 -3.81) (xy -1.27 -5.08) (xy 1.27 -6.35) (xy 0 -7.62)
+					)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy -6.35 1.27) (xy -1.27 1.27)
+					)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy -2.54 3.81) (xy -1.27 1.27) (xy 1.27 2.54)
+					)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(symbol "R_Potentiometer_1_1"
+				(pin passive line
+					(at 0 10.16 270)
+					(length 2.54)
+					(name "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at -7.62 0 0)
+					(length 2.54)
+					(name "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 0 -10.16 90)
+					(length 2.54)
+					(name "3"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "3"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+        """,
+        """
+		(symbol "Switch:SW_Push"
+			(pin_numbers
+				(hide yes)
+			)
+			(pin_names
+				(offset 0)
+				(hide yes)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(property "Reference" "SW"
+				(at 0 3.81 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "SW_Push"
+				(at 0 -3.81 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Datasheet" "~"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Description" "Push button switch, normally open"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(symbol "SW_Push_0_1"
+				(circle
+					(center -2.54 0)
+					(radius 0.762)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(circle
+					(center 2.54 0)
+					(radius 0.762)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy -1.27 1.27) (xy 1.27 -1.27)
+					)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(symbol "SW_Push_1_1"
+				(pin passive line
+					(at -7.62 0 0)
+					(length 4.318)
+					(name "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 7.62 0 180)
+					(length 4.318)
+					(name "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+        """,
+        """
 		(symbol "power:GND"
 			(power)
 			(pin_numbers
@@ -3113,11 +4300,416 @@ def export_linear_regulator(design: Dict, output_path: Path) -> str:
     return finish_schematic(builder, output_path)
 
 
+def export_comet_led_sequencer(design: Dict, output_path: Path) -> str:
+    builder, _ = start_schematic(output_path)
+
+    def place_gnd(reference: str, at: Point) -> None:
+        builder.symbol_instance(
+            lib_id="power:GND",
+            at=at,
+            reference=reference,
+            value=design["gnd_net"],
+            footprint="",
+            description='Power symbol creates a global label with name "GND" , ground',
+            pin_numbers=["1"],
+            ref_at=Point(at.x, at.y + 5.08),
+            value_at=Point(at.x, at.y + 2.54),
+            footprint_at=at,
+            ref_hidden=True,
+        )
+
+    def place_vcc(reference: str, at: Point) -> None:
+        builder.symbol_instance(
+            lib_id="power:VCC",
+            at=at,
+            reference=reference,
+            value=design["vcc_net"],
+            footprint="",
+            description='Power symbol creates a global label with name "VCC"',
+            pin_numbers=["1"],
+            ref_at=Point(at.x, at.y + 5.08),
+            value_at=Point(at.x, at.y - 2.54),
+            footprint_at=at,
+            ref_hidden=True,
+        )
+
+    power_conn = Point(30.48, 55.88)
+    power_pin_vcc = Point(power_conn.x + 5.08, power_conn.y - 1.27)
+    power_pin_gnd = Point(power_conn.x + 5.08, power_conn.y + 1.27)
+    bulk_cap = Point(48.26, 60.96)
+    bulk_cap_top = Point(bulk_cap.x, bulk_cap.y - 7.62)
+    bulk_cap_bottom = Point(bulk_cap.x, bulk_cap.y + 7.62)
+
+    timer = Point(81.28, 81.28)
+    timer_rst = local_to_sheet(timer, -10.16, 7.62)
+    timer_thres = local_to_sheet(timer, -10.16, 2.54)
+    timer_trig = local_to_sheet(timer, -10.16, -2.54)
+    timer_cont = local_to_sheet(timer, -10.16, -7.62)
+    timer_disch = local_to_sheet(timer, 10.16, 7.62)
+    timer_out = local_to_sheet(timer, 10.16, 0)
+    timer_vcc = local_to_sheet(timer, 0, 12.7)
+    timer_gnd = local_to_sheet(timer, 0, -12.7)
+
+    timer_decouple = Point(66.04, 60.96)
+    timer_decouple_top = Point(timer_decouple.x, timer_decouple.y - 7.62)
+    timer_decouple_bottom = Point(timer_decouple.x, timer_decouple.y + 7.62)
+    control_cap = Point(55.88, 96.52)
+    control_cap_top = Point(control_cap.x, control_cap.y - 3.81)
+    control_cap_bottom = Point(control_cap.x, control_cap.y + 3.81)
+
+    charge_res = Point(119.38, 53.34)
+    charge_res_left = Point(charge_res.x - 7.62, charge_res.y)
+    charge_res_right = Point(charge_res.x + 7.62, charge_res.y)
+    speed_res = Point(119.38, 63.5)
+    speed_res_left = Point(speed_res.x - 7.62, speed_res.y)
+    speed_res_right = Point(speed_res.x + 7.62, speed_res.y)
+    speed_pot = Point(139.7, 73.66)
+    pot_pin_1 = Point(speed_pot.x, speed_pot.y - 10.16)
+    pot_pin_2 = Point(speed_pot.x - 7.62, speed_pot.y)
+    pot_pin_3 = Point(speed_pot.x, speed_pot.y + 10.16)
+    timing_cap = Point(147.32, 96.52)
+    timing_cap_top = Point(timing_cap.x, timing_cap.y - 3.81)
+    timing_cap_bottom = Point(timing_cap.x, timing_cap.y + 3.81)
+
+    reset_switch = Point(104.14, 48.26)
+    reset_switch_left = Point(reset_switch.x - 7.62, reset_switch.y)
+    reset_switch_right = Point(reset_switch.x + 7.62, reset_switch.y)
+    reset_pull = Point(111.76, 86.36)
+    reset_pull_top = Point(reset_pull.x, reset_pull.y - 3.81)
+    reset_pull_bottom = Point(reset_pull.x, reset_pull.y + 3.81)
+
+    counter = Point(137.16, 81.28)
+    counter_cp0 = local_to_sheet(counter, -15.24, 20.32)
+    counter_cp1 = local_to_sheet(counter, -15.24, 15.24)
+    counter_mr = local_to_sheet(counter, -15.24, 10.16)
+    counter_co = local_to_sheet(counter, -15.24, 0)
+    counter_vdd = local_to_sheet(counter, 0, 33.02)
+    counter_vss = local_to_sheet(counter, 0, -33.02)
+    counter_outputs = [
+        local_to_sheet(counter, 15.24, 22.86),
+        local_to_sheet(counter, 15.24, 17.78),
+        local_to_sheet(counter, 15.24, 12.7),
+        local_to_sheet(counter, 15.24, 7.62),
+        local_to_sheet(counter, 15.24, 2.54),
+        local_to_sheet(counter, 15.24, -2.54),
+        local_to_sheet(counter, 15.24, -7.62),
+        local_to_sheet(counter, 15.24, -12.7),
+        local_to_sheet(counter, 15.24, -17.78),
+        local_to_sheet(counter, 15.24, -22.86),
+    ]
+
+    counter_decouple = Point(154.94, 60.96)
+    counter_decouple_top = Point(counter_decouple.x, counter_decouple.y - 7.62)
+    counter_decouple_bottom = Point(counter_decouple.x, counter_decouple.y + 7.62)
+    carry_conn = Point(101.6, 81.28)
+    carry_pin = Point(carry_conn.x + 5.08, carry_conn.y)
+
+    led_bus_x = 205.74
+    led_ground_top = counter_outputs[0].y + 15.24
+    led_ground_bottom = counter_outputs[-1].y + 15.24
+
+    builder.symbol_instance(
+        lib_id="Connector_Generic:Conn_01x02",
+        at=power_conn,
+        reference=design["power_connector"]["ref"],
+        value=design["vcc_net"],
+        footprint=design["power_connector"]["footprint"],
+        description="5V power input",
+        pin_numbers=["1", "2"],
+        ref_at=Point(power_conn.x - 1.27, power_conn.y - 6.35),
+        value_at=Point(power_conn.x - 2.54, power_conn.y + 6.35),
+        footprint_at=power_conn,
+        rotation=180,
+    )
+    builder.symbol_instance(
+        lib_id="edp:C_V",
+        at=bulk_cap,
+        reference=design["bulk_capacitor"]["ref"],
+        value=design["bulk_capacitor"]["value"],
+        footprint=design["bulk_capacitor"]["footprint"],
+        description="Input bulk capacitor",
+        pin_numbers=["1", "2"],
+        ref_at=Point(bulk_cap.x + 4.445, bulk_cap.y - 1.27),
+        value_at=Point(bulk_cap.x + 4.445, bulk_cap.y + 3.81),
+        footprint_at=bulk_cap,
+    )
+    builder.wire(power_pin_vcc, bulk_cap_top)
+    builder.wire(power_pin_gnd, bulk_cap_bottom)
+    place_vcc("#PWR0201", Point(bulk_cap_top.x, bulk_cap_top.y - 5.08))
+    builder.wire(bulk_cap_top, Point(bulk_cap_top.x, bulk_cap_top.y - 5.08))
+    place_gnd("#PWR0202", Point(bulk_cap_bottom.x, bulk_cap_bottom.y + 5.08))
+    builder.wire(bulk_cap_bottom, Point(bulk_cap_bottom.x, bulk_cap_bottom.y + 5.08))
+
+    builder.symbol_instance(
+        lib_id="Timer:NE555P",
+        at=timer,
+        reference=design["timer"]["ref"],
+        value=design["timer"]["value"],
+        footprint=design["timer"]["footprint"],
+        description="Precision timer, 555 compatible",
+        pin_numbers=["1", "2", "3", "4", "5", "6", "7", "8"],
+        ref_at=Point(timer.x - 6.35, timer.y - 13.97),
+        value_at=Point(timer.x - 10.16, timer.y + 13.97),
+        footprint_at=timer,
+        datasheet="http://www.ti.com/lit/ds/symlink/ne555.pdf",
+    )
+    builder.symbol_instance(
+        lib_id="edp:C_V",
+        at=timer_decouple,
+        reference=design["timer_decoupling"]["ref"],
+        value=design["timer_decoupling"]["value"],
+        footprint=design["timer_decoupling"]["footprint"],
+        description="555 supply decoupling capacitor",
+        pin_numbers=["1", "2"],
+        ref_at=Point(timer_decouple.x + 4.445, timer_decouple.y - 1.27),
+        value_at=Point(timer_decouple.x + 4.445, timer_decouple.y + 3.81),
+        footprint_at=timer_decouple,
+    )
+    place_vcc("#PWR0203", Point(timer_vcc.x, timer_vcc.y - 5.08))
+    builder.wire(timer_vcc, Point(timer_vcc.x, timer_vcc.y - 5.08))
+    place_gnd("#PWR0204", Point(timer_gnd.x, timer_gnd.y + 5.08))
+    builder.wire(timer_gnd, Point(timer_gnd.x, timer_gnd.y + 5.08))
+    place_vcc("#PWR0205", Point(timer_decouple_top.x, timer_decouple_top.y - 5.08))
+    builder.wire(timer_decouple_top, Point(timer_decouple_top.x, timer_decouple_top.y - 5.08))
+    place_gnd("#PWR0206", Point(timer_decouple_bottom.x, timer_decouple_bottom.y + 5.08))
+    builder.wire(timer_decouple_bottom, Point(timer_decouple_bottom.x, timer_decouple_bottom.y + 5.08))
+    builder.wire(timer_rst, Point(timer_rst.x, timer_rst.y - 17.78))
+    place_vcc("#PWR0207", Point(timer_rst.x, timer_rst.y - 22.86))
+    builder.wire(Point(timer_rst.x, timer_rst.y - 17.78), Point(timer_rst.x, timer_rst.y - 22.86))
+
+    builder.symbol_instance(
+        lib_id="Device:C",
+        at=control_cap,
+        reference=design["control_capacitor"]["ref"],
+        value=design["control_capacitor"]["value"],
+        footprint=design["control_capacitor"]["footprint"],
+        description="555 control pin bypass capacitor",
+        pin_numbers=["1", "2"],
+        ref_at=Point(control_cap.x - 10.16, control_cap.y - 1.27),
+        value_at=Point(control_cap.x - 10.16, control_cap.y - 6.35),
+        footprint_at=control_cap,
+    )
+    builder.wire(timer_cont, Point(control_cap_top.x, timer_cont.y))
+    builder.wire(Point(control_cap_top.x, timer_cont.y), control_cap_top)
+    place_gnd("#PWR0208", Point(control_cap_bottom.x, control_cap_bottom.y + 5.08))
+    builder.wire(control_cap_bottom, Point(control_cap_bottom.x, control_cap_bottom.y + 5.08))
+
+    builder.wire(timer_out, Point(timer_out.x + 10.16, timer_out.y))
+    builder.label(design["clock_net"], Point(timer_out.x + 10.16, timer_out.y))
+    builder.wire(timer_disch, Point(timer_disch.x + 10.16, timer_disch.y))
+    builder.label(design["discharge_net"], Point(timer_disch.x + 10.16, timer_disch.y))
+    builder.wire(timer_thres, Point(timer_thres.x - 7.62, timer_thres.y))
+    builder.label(design["timing_net"], Point(timer_thres.x - 7.62, timer_thres.y))
+    builder.wire(timer_trig, Point(timer_trig.x - 7.62, timer_trig.y))
+    builder.label(design["timing_net"], Point(timer_trig.x - 7.62, timer_trig.y))
+
+    builder.symbol_instance(
+        lib_id="edp:R_H",
+        at=charge_res,
+        reference=design["charge_resistor"]["ref"],
+        value=design["charge_resistor"]["value"],
+        footprint=design["charge_resistor"]["footprint"],
+        description="555 charge resistor",
+        pin_numbers=["1", "2"],
+        ref_at=Point(charge_res.x - 5.08, charge_res.y - 5.08),
+        value_at=Point(charge_res.x - 5.08, charge_res.y + 4.445),
+        footprint_at=charge_res,
+    )
+    builder.label(design["discharge_net"], charge_res_left)
+    builder.wire(charge_res_right, Point(charge_res_right.x + 7.62, charge_res_right.y))
+    place_vcc("#PWR0209", Point(charge_res_right.x + 7.62, charge_res_right.y))
+
+    builder.symbol_instance(
+        lib_id="edp:R_H",
+        at=speed_res,
+        reference=design["speed_resistor"]["ref"],
+        value=design["speed_resistor"]["value"],
+        footprint=design["speed_resistor"]["footprint"],
+        description="555 minimum speed resistor",
+        pin_numbers=["1", "2"],
+        ref_at=Point(speed_res.x - 5.08, speed_res.y - 5.08),
+        value_at=Point(speed_res.x - 5.08, speed_res.y + 4.445),
+        footprint_at=speed_res,
+    )
+    builder.label(design["discharge_net"], speed_res_left)
+
+    builder.symbol_instance(
+        lib_id="Device:R_Potentiometer",
+        at=speed_pot,
+        reference=design["potentiometer"]["ref"],
+        value=design["potentiometer"]["value"],
+        footprint=design["potentiometer"]["footprint"],
+        description="Speed control potentiometer",
+        pin_numbers=["1", "2", "3"],
+        ref_at=Point(speed_pot.x + 3.81, speed_pot.y - 7.62),
+        value_at=Point(speed_pot.x + 3.81, speed_pot.y + 7.62),
+        footprint_at=speed_pot,
+    )
+    builder.wire(speed_res_right, Point(pot_pin_1.x, speed_res_right.y))
+    builder.wire(Point(pot_pin_1.x, speed_res_right.y), pot_pin_1)
+    builder.wire(pot_pin_2, Point(pot_pin_2.x, pot_pin_3.y))
+    builder.wire(Point(pot_pin_2.x, pot_pin_3.y), pot_pin_3)
+    builder.label(design["timing_net"], Point(pot_pin_2.x - 7.62, pot_pin_2.y + 5.08))
+    builder.wire(Point(pot_pin_2.x - 7.62, pot_pin_2.y + 5.08), Point(pot_pin_2.x, pot_pin_2.y + 5.08))
+
+    builder.symbol_instance(
+        lib_id="Device:C",
+        at=timing_cap,
+        reference=design["timing_capacitor"]["ref"],
+        value=design["timing_capacitor"]["value"],
+        footprint=design["timing_capacitor"]["footprint"],
+        description="555 timing capacitor",
+        pin_numbers=["1", "2"],
+        ref_at=Point(timing_cap.x + 4.445, timing_cap.y - 1.27),
+        value_at=Point(timing_cap.x + 4.445, timing_cap.y + 3.81),
+        footprint_at=timing_cap,
+    )
+    builder.label(design["timing_net"], timing_cap_top)
+    place_gnd("#PWR0210", Point(timing_cap_bottom.x, timing_cap_bottom.y + 5.08))
+    builder.wire(timing_cap_bottom, Point(timing_cap_bottom.x, timing_cap_bottom.y + 5.08))
+
+    builder.symbol_instance(
+        lib_id="Switch:SW_Push",
+        at=reset_switch,
+        reference=design["reset_switch"]["ref"],
+        value=design["reset_switch"]["value"],
+        footprint=design["reset_switch"]["footprint"],
+        description="Manual reset switch",
+        pin_numbers=["1", "2"],
+        ref_at=Point(reset_switch.x - 2.54, reset_switch.y - 5.08),
+        value_at=Point(reset_switch.x - 5.08, reset_switch.y + 4.445),
+        footprint_at=reset_switch,
+    )
+    place_vcc("#PWR0211", Point(reset_switch_left.x, reset_switch_left.y - 7.62))
+    builder.wire(reset_switch_left, Point(reset_switch_left.x, reset_switch_left.y - 7.62))
+    builder.wire(reset_switch_right, Point(reset_switch_right.x, reset_switch_right.y))
+    builder.label(design["reset_net"], Point(reset_switch_right.x, reset_switch_right.y))
+
+    builder.symbol_instance(
+        lib_id="Device:R",
+        at=reset_pull,
+        reference=design["reset_pull"]["ref"],
+        value=design["reset_pull"]["value"],
+        footprint=design["reset_pull"]["footprint"],
+        description="Reset pull-down resistor",
+        pin_numbers=["1", "2"],
+        ref_at=Point(reset_pull.x + 4.445, reset_pull.y - 1.27),
+        value_at=Point(reset_pull.x + 4.445, reset_pull.y + 3.81),
+        footprint_at=reset_pull,
+    )
+    builder.label(design["reset_net"], reset_pull_top)
+    place_gnd("#PWR0212", Point(reset_pull_bottom.x, reset_pull_bottom.y + 5.08))
+    builder.wire(reset_pull_bottom, Point(reset_pull_bottom.x, reset_pull_bottom.y + 5.08))
+
+    builder.symbol_instance(
+        lib_id="4xxx_IEEE:4017",
+        at=counter,
+        reference=design["counter"]["ref"],
+        value=design["counter"]["value"],
+        footprint=design["counter"]["footprint"],
+        description="CMOS decade counter and decoder",
+        pin_numbers=["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16"],
+        ref_at=Point(counter.x - 7.62, counter.y - 31.75),
+        value_at=Point(counter.x - 10.16, counter.y + 31.75),
+        footprint_at=counter,
+    )
+    builder.symbol_instance(
+        lib_id="edp:C_V",
+        at=counter_decouple,
+        reference=design["counter_decoupling"]["ref"],
+        value=design["counter_decoupling"]["value"],
+        footprint=design["counter_decoupling"]["footprint"],
+        description="4017 supply decoupling capacitor",
+        pin_numbers=["1", "2"],
+        ref_at=Point(counter_decouple.x + 4.445, counter_decouple.y - 1.27),
+        value_at=Point(counter_decouple.x + 4.445, counter_decouple.y + 3.81),
+        footprint_at=counter_decouple,
+    )
+    place_vcc("#PWR0213", Point(counter_vdd.x, counter_vdd.y - 5.08))
+    builder.wire(counter_vdd, Point(counter_vdd.x, counter_vdd.y - 5.08))
+    place_gnd("#PWR0214", Point(counter_vss.x, counter_vss.y + 5.08))
+    builder.wire(counter_vss, Point(counter_vss.x, counter_vss.y + 5.08))
+    builder.label(design["clock_net"], Point(counter_cp0.x - 10.16, counter_cp0.y))
+    builder.wire(Point(counter_cp0.x - 10.16, counter_cp0.y), counter_cp0)
+    place_gnd("#PWR0215", Point(counter_cp1.x - 10.16, counter_cp1.y))
+    builder.wire(Point(counter_cp1.x - 10.16, counter_cp1.y), counter_cp1)
+    builder.label(design["reset_net"], Point(counter_mr.x - 10.16, counter_mr.y))
+    builder.wire(Point(counter_mr.x - 10.16, counter_mr.y), counter_mr)
+    builder.symbol_instance(
+        lib_id="Connector_Generic:Conn_01x01",
+        at=carry_conn,
+        reference=design["carry_connector"]["ref"],
+        value=design["carry_net"],
+        footprint=design["carry_connector"]["footprint"],
+        description="Cascade clock output",
+        pin_numbers=["1"],
+        ref_at=Point(carry_conn.x - 1.27, carry_conn.y - 4.445),
+        value_at=Point(carry_conn.x - 2.54, carry_conn.y + 4.445),
+        footprint_at=carry_conn,
+        rotation=180,
+    )
+    builder.wire(carry_pin, counter_co)
+    place_vcc("#PWR0216", Point(counter_decouple_top.x, counter_decouple_top.y - 5.08))
+    builder.wire(counter_decouple_top, Point(counter_decouple_top.x, counter_decouple_top.y - 5.08))
+    place_gnd("#PWR0217", Point(counter_decouple_bottom.x, counter_decouple_bottom.y + 5.08))
+    builder.wire(counter_decouple_bottom, Point(counter_decouple_bottom.x, counter_decouple_bottom.y + 5.08))
+
+    builder.wire(Point(led_bus_x, led_ground_top), Point(led_bus_x, led_ground_bottom))
+    place_gnd("#PWR0218", Point(led_bus_x, led_ground_bottom + 5.08))
+    builder.wire(Point(led_bus_x, led_ground_bottom), Point(led_bus_x, led_ground_bottom + 5.08))
+
+    for output_point, channel in zip(counter_outputs, design["led_channels"]):
+        label_point = Point(output_point.x + 5.08, output_point.y)
+        resistor_origin = Point(177.8, output_point.y)
+        resistor_left = Point(resistor_origin.x - 7.62, resistor_origin.y)
+        resistor_right = Point(resistor_origin.x + 7.62, resistor_origin.y)
+        led_origin = Point(195.58, output_point.y + 7.62)
+        led_anode = Point(led_origin.x, led_origin.y - 7.62)
+        led_cathode = Point(led_origin.x, led_origin.y + 7.62)
+
+        builder.wire(output_point, label_point)
+        builder.label(channel["step_net"], label_point)
+        builder.label(channel["step_net"], resistor_left)
+        builder.symbol_instance(
+            lib_id="edp:R_H",
+            at=resistor_origin,
+            reference=channel["resistor"]["ref"],
+            value=channel["resistor"]["value"],
+            footprint=channel["resistor"]["footprint"],
+            description="LED current limit resistor",
+            pin_numbers=["1", "2"],
+            ref_at=Point(resistor_origin.x - 5.08, resistor_origin.y - 5.08),
+            value_at=Point(resistor_origin.x - 5.08, resistor_origin.y + 4.445),
+            footprint_at=resistor_origin,
+        )
+        builder.symbol_instance(
+            lib_id="Device:LED",
+            at=led_origin,
+            reference=channel["led"]["ref"],
+            value=channel["led"]["value"],
+            footprint=channel["led"]["footprint"],
+            description="Sequencer output LED",
+            pin_numbers=["1", "2"],
+            ref_at=Point(led_origin.x + 3.81, led_origin.y - 1.27),
+            value_at=Point(led_origin.x + 3.81, led_origin.y + 3.81),
+            footprint_at=led_origin,
+        )
+        builder.wire(resistor_right, led_anode)
+        builder.wire(led_cathode, Point(led_bus_x, led_cathode.y))
+
+    builder.text("555 astable clock + 4017 decade counter comet sequencer", Point(22.86, 27.94))
+    builder.text("Local labels tie CLOCK, RESET, TIMING and DISCHARGE nets across the sheet.", Point(22.86, 33.02))
+
+    return finish_schematic(builder, output_path)
+
+
 def export_supported_design(design: SupportedDesign, output_path: Path) -> str:
     if design.kind == "opamp_amplifier":
         if design.data["mode"] == "non_inverting":
             return export_non_inverting_amplifier(design.data, output_path)
         return export_inverting_amplifier(design.data, output_path)
+    if design.kind == "comet_led_sequencer":
+        return export_comet_led_sequencer(design.data, output_path)
     if design.kind == "voltage_divider":
         return export_passive_shunt_topology(design.data, output_path, shunt_kind="divider")
     if design.kind == "rc_lowpass":
@@ -3174,8 +4766,8 @@ def main():
         if not design:
             raise ValueError(
                 "KiCad schematic export could not map this circuit to a supported topology. "
-                "Supported topology families currently include voltage-divider, rc-lowpass, "
-                "L7805 linear regulator, and TL072 inverting/non-inverting amplifiers."
+                "Supported topology families currently include the comet LED sequencer, voltage-divider, "
+                "rc-lowpass, L7805 linear regulator, and TL072 inverting/non-inverting amplifiers."
             )
 
         schematic_path = project_dir / f"{base_name}.kicad_sch"
