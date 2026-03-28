@@ -63,28 +63,9 @@ sudo apt install kicad
 - source-of-truth: `skills/*/SKILL.md`
 - Claude Code 互換: `.claude-plugin/` を同じ repo ルートに維持
 
-他の作業 repo でも使いたい場合は、この repo を clone して install script を実行します。
+この repo を Codex で開くと、repo-local marketplace [`.agents/plugins/marketplace.json`](/Users/koizumikenjin/workspace/engineering-design-plugin/.agents/plugins/marketplace.json) から `engineering-design` plugin を install できます。
 
-```bash
-git clone https://github.com/koizumikento/engineering-design-plugin.git
-cd engineering-design-plugin
-./scripts/install_codex_plugin.sh
-```
-
-この script は次を自動で行います。
-
-- `~/.codex/plugins/engineering-design` への personal plugin copy
-- `~/.agents/plugins/marketplace.json` の `engineering-design` entry の追加または更新
-
-既存の marketplace entry が別 path を向いている場合や、install 先 directory がこの installer 管理外だった場合は、上書きせずに fail します。
-
-設定後に Codex を再起動し、Plugin Directory の `local-personal` marketplace に出る `Engineering Design` を `+` で install します。
-
-不要になったら次で personal install を削除できます。
-
-```bash
-./scripts/uninstall_codex_plugin.sh
-```
+必要なら Codex を再起動して、Plugin Directory から `Engineering Design` を `+` で install します。
 
 ## 基本ワークフロー
 

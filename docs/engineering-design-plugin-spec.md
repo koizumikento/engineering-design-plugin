@@ -93,8 +93,6 @@ engineering-design-plugin/
 │   └── marketplace.json
 ├── scripts/
 │   ├── cadquery_runner.py
-│   ├── install_codex_plugin.sh
-│   ├── uninstall_codex_plugin.sh
 │   ├── preview_generator.py
 │   └── integration_checker.py
 ├── templates/
@@ -115,7 +113,6 @@ engineering-design-plugin/
 - `skills/*/agents/openai.yaml` は repo 管理用メタデータとして維持し、plugin manifest に重複転記しない
 - `.app.json` と `.mcp.json` は現時点では追加しない
 - repo-local marketplace は `.agents/plugins/marketplace.json` に置き、`source.path: "./"` で repo ルートを指す
-- personal install は `scripts/install_codex_plugin.sh` と `scripts/uninstall_codex_plugin.sh` で `~/.codex/plugins/engineering-design` と `~/.agents/plugins/marketplace.json` を管理する
 - `.claude-plugin/` は削らず、Codex と Claude の install metadata を同居させる
 
 repo ルートを plugin directory として扱う方針は、OpenAI の plugin docs にある `source.path` が plugin directory を指すという要件からの適用であり、この repo では `./skills/` をそのまま公開対象にできる点と、Claude Code plugin 用の既存ルート構造を崩さずに済む点を優先している。
