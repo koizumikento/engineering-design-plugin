@@ -8,7 +8,7 @@
       "name": "engineering-design",
       "source": {
         "source": "local",
-        "path": "./"
+        "path": "./plugins/engineering-design"
       },
       "policy": {
         "installation": "AVAILABLE",

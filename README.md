@@ -4,7 +4,7 @@
 
 このリポジトリでは `skills/` を正本とし、エージェントが読むべき運用知識は `SKILL.md` と `references/`、`templates/`、`scripts/` に集約しています。OpenAI/Codex 向けのメタデータは各スキルの `agents/openai.yaml` に置き、Claude Code 向けにはインストール用メタデータとして `.claude-plugin/` を残しています。
 
-Codex plugin 対応では、この repo 自体を plugin root として扱います。`.codex-plugin/plugin.json` から `./skills/` を指し、既存の `skills/` 構成をそのまま配布対象にします。.claude-plugin/ はそのまま残し、repo ルートに Codex と Claude の両 manifest を共存させます。
+Codex plugin 対応では、`plugins/engineering-design` を plugin root として扱います。plugin root から `skills/` は symlink 参照し、既存の `skills/` 構成をそのまま配布対象にします。.claude-plugin/ はそのまま残し、repo ルートに Claude の manifest と Codex 用 marketplace を共存させます。
 
 ## できること
 
@@ -56,14 +56,14 @@ sudo apt install kicad
 
 ### Codex plugin として使う
 
-この repo は repo ルートを plugin root としてそのまま扱えるようにしています。
+この repo は `plugins/engineering-design` を plugin root として扱います。
 
-- 必須 manifest: `.codex-plugin/plugin.json`
-- bundled skills: `./skills/`
+- 必須 manifest: `plugins/engineering-design/.codex-plugin/plugin.json`
+- bundled skills: `plugins/engineering-design/skills/`
 - source-of-truth: `skills/*/SKILL.md`
 - Claude Code 互換: `.claude-plugin/` を同じ repo ルートに維持
 
-この repo を Codex で開くと、repo-local marketplace [`.agents/plugins/marketplace.json`](/Users/koizumikenjin/workspace/engineering-design-plugin/.agents/plugins/marketplace.json) から `engineering-design` plugin を install できます。
+この repo を Codex で開くと、repo-local marketplace [`.agents/plugins/marketplace.json`](/Users/koizumikenjin/workspace/engineering-design-plugin/.agents/plugins/marketplace.json) から `plugins/engineering-design` を指す `engineering-design` plugin を install できます。
 
 必要なら Codex を再起動して、Plugin Directory から `Engineering Design` を `+` で install します。
 
@@ -107,7 +107,11 @@ engineering-design-plugin/
 ├── .agents/
 │   └── plugins/
 │       └── marketplace.json # Codex repo-local marketplace
-├── .codex-plugin/           # Codex plugin manifest
+├── plugins/
+│   └── engineering-design/  # Codex plugin root
+│       ├── .codex-plugin/
+│       │   └── plugin.json
+│       └── skills -> ../../skills
 ├── skills/                   # エージェントが参照する主定義
 │   ├── spec-writing/
 │   │   ├── SKILL.md
