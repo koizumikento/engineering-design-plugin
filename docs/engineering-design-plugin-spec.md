@@ -6,7 +6,7 @@
 
 以前は Claude Code プラグインとして構成されていたが、現在は `skills/` を正本とし、クライアント固有の `commands/` や `hooks/` に依存しない構成へ整理している。Claude Code 向けの `.claude-plugin/` はインストール互換のため維持し、旧互換レイヤーにあった運用ルールは本ドキュメントと `skills/*/SKILL.md` に移管した。
 
-Codex plugin 化では `plugins/engineering-design` を plugin root とし、その下の `.codex-plugin/plugin.json` から `./skills/` を参照する。`plugins/engineering-design/skills/` は GitHub インストールで symlink 解決に依存しないよう実ディレクトリとして同梱する。Claude Code 向けの `.claude-plugin/` は repo ルートに維持し、Codex 側は marketplace から nested plugin root を指す。
+Codex plugin 化では `plugins/engineering-design` を開発用 plugin root とし、その下の `.codex-plugin/plugin.json` から `./skills/` を参照する。GitHub install 用には `.agents/plugins/engineering-design` に配布コピーを置き、marketplace からその plugin root を指す。これは Codex が GitHub marketplace 追加時に `.agents/plugins` だけを sparse checkout する場合でも plugin root と skills を取得できるようにするためである。Claude Code 向けの `.claude-plugin/` は repo ルートに維持する。
 
 ## 設計原則
 
@@ -63,7 +63,8 @@ Codex plugin 化では `plugins/engineering-design` を plugin root とし、そ
 engineering-design-plugin/
 ├── .agents/
 │   └── plugins/
-│       └── marketplace.json
+│       ├── marketplace.json
+│       └── engineering-design/
 ├── plugins/
 │   └── engineering-design/
 │       ├── plugin.json
@@ -111,16 +112,17 @@ engineering-design-plugin/
 
 - plugin root は `plugins/engineering-design` とする
 - required manifest は `plugins/engineering-design/.codex-plugin/plugin.json`
+- GitHub install 用の marketplace は `.agents/plugins/engineering-design` を source path とする
 - installer 互換のため repo root と plugin root 直下にも `plugin.json` を置く
 - `skills` フィールドは plugin root から見た `./skills/` を指す
 - Codex plugin 名は Claude 側と揃えて `engineering-design` とする
 - `skills/*/SKILL.md` が operational source-of-truth のまま残り、配布前に `plugins/engineering-design/skills/` へ同期する
 - `skills/*/agents/openai.yaml` は repo 管理用メタデータとして維持し、plugin manifest に重複転記しない
 - `.app.json` と `.mcp.json` は現時点では追加しない
-- repo-local marketplace は `.agents/plugins/marketplace.json` に置き、`source.path: "./plugins/engineering-design"` で plugin root を指す
+- repo-local marketplace は `.agents/plugins/marketplace.json` に置き、`source.path: "./.agents/plugins/engineering-design"` で GitHub install 用 plugin root を指す
 - `.claude-plugin/` は削らず、Codex と Claude の install metadata を同居させる
 
-plugin root を `plugins/engineering-design` に分離する方針は、repo-local marketplace の `source.path` を `stray-plugin` と同じ形に揃えつつ、`skills/` を source-of-truth として維持するためである。GitHub からのインストールでは Windows checkout や installer 側の symlink 扱いに左右されるため、plugin root には同期済みの `skills/` ディレクトリを同梱する。
+開発用 plugin root を `plugins/engineering-design` に分離する方針は、`skills/` を source-of-truth として維持するためである。一方、GitHub からの marketplace install では `.agents/plugins` だけが sparse checkout される場合があるため、配布用 plugin root と同期済みの `skills/` ディレクトリを `.agents/plugins/engineering-design` に同梱する。
 
 ## スキルごとの責務
 
