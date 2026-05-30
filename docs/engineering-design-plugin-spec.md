@@ -66,6 +66,7 @@ engineering-design-plugin/
 │       └── marketplace.json
 ├── plugins/
 │   └── engineering-design/
+│       ├── plugin.json
 │       ├── .codex-plugin/
 │       │   └── plugin.json
 │       └── skills/
@@ -110,6 +111,7 @@ engineering-design-plugin/
 
 - plugin root は `plugins/engineering-design` とする
 - required manifest は `plugins/engineering-design/.codex-plugin/plugin.json`
+- installer 互換のため repo root と plugin root 直下にも `plugin.json` を置く
 - `skills` フィールドは plugin root から見た `./skills/` を指す
 - Codex plugin 名は Claude 側と揃えて `engineering-design` とする
 - `skills/*/SKILL.md` が operational source-of-truth のまま残り、配布前に `plugins/engineering-design/skills/` へ同期する

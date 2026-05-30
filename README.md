@@ -59,6 +59,7 @@ sudo apt install kicad
 この repo は `plugins/engineering-design` を plugin root として扱います。
 
 - 必須 manifest: `plugins/engineering-design/.codex-plugin/plugin.json`
+- GitHub install 互換 manifest: `plugin.json`, `plugins/engineering-design/plugin.json`
 - bundled skills: `plugins/engineering-design/skills/`
 - source-of-truth: `skills/*/SKILL.md`（配布前に bundled skills へ同期）
 - Claude Code 互換: `.claude-plugin/` を同じ repo ルートに維持
@@ -109,6 +110,7 @@ engineering-design-plugin/
 │       └── marketplace.json # Codex repo-local marketplace
 ├── plugins/
 │   └── engineering-design/  # Codex plugin root
+│       ├── plugin.json      # installer 互換 manifest
 │       ├── .codex-plugin/
 │       │   └── plugin.json
 │       └── skills/          # GitHub install 用に同梱
