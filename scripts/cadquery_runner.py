@@ -40,24 +40,77 @@ def load_script(script_path: Path) -> dict:
     return result
 
 
-def validate_shape(result) -> dict:
-    """形状の妥当性を検証"""
+def _shape_from_result(result):
+    """CadQuery Workplane / Assembly / Shape から検査対象 shape を取り出す。"""
     import cadquery as cq
 
+    if isinstance(result, cq.Workplane):
+        return result.val()
+
+    if hasattr(cq, "Assembly") and isinstance(result, cq.Assembly):
+        return result.toCompound()
+
+    if hasattr(result, "toCompound"):
+        try:
+            return result.toCompound()
+        except Exception:
+            pass
+
+    return result
+
+
+def _vector_to_dict(vector) -> dict:
+    return {
+        "x": float(getattr(vector, "x", 0.0)),
+        "y": float(getattr(vector, "y", 0.0)),
+        "z": float(getattr(vector, "z", 0.0)),
+    }
+
+
+def _topology_count(shape, method_name: str) -> int:
+    method = getattr(shape, method_name, None)
+    if method is None:
+        return 0
+
+    try:
+        return len(method())
+    except Exception:
+        return 0
+
+
+def _center_of_mass(shape) -> Optional[dict]:
+    for method_name in ("CenterOfMass", "centerOfMass", "Center"):
+        method = getattr(shape, method_name, None)
+        if method is None:
+            continue
+
+        try:
+            return _vector_to_dict(method())
+        except Exception:
+            continue
+
+    return None
+
+
+def validate_shape(result) -> dict:
+    """形状の妥当性を検証"""
     info = {
         "valid": False,
         "volume": 0.0,
         "area": 0.0,
+        "center_of_mass": None,
         "bounding_box": {},
+        "topology": {
+            "solids": 0,
+            "faces": 0,
+            "edges": 0,
+            "vertices": 0,
+        },
         "errors": []
     }
 
     try:
-        # Workplaneから形状を取得
-        if isinstance(result, cq.Workplane):
-            shape = result.val()
-        else:
-            shape = result
+        shape = _shape_from_result(result)
 
         # 妥当性チェック
         info["valid"] = shape.isValid()
@@ -67,6 +120,7 @@ def validate_shape(result) -> dict:
         # 体積・表面積
         info["volume"] = shape.Volume()
         info["area"] = shape.Area()
+        info["center_of_mass"] = _center_of_mass(shape)
 
         # バウンディングボックス
         bb = shape.BoundingBox()
@@ -81,11 +135,29 @@ def validate_shape(result) -> dict:
             "z_min": bb.zmin,
             "z_max": bb.zmax,
         }
+        info["topology"] = {
+            "solids": _topology_count(shape, "Solids"),
+            "faces": _topology_count(shape, "Faces"),
+            "edges": _topology_count(shape, "Edges"),
+            "vertices": _topology_count(shape, "Vertices"),
+        }
 
     except Exception as e:
         info["errors"].append(str(e))
 
     return info
+
+
+def write_report(result_data: dict, output_dir: Path, base_name: str) -> Path:
+    report_dir = output_dir / "reports"
+    report_dir.mkdir(parents=True, exist_ok=True)
+    report_path = report_dir / f"{base_name}-cad-summary.json"
+    result_data["report"] = str(report_path)
+    report_path.write_text(
+        json.dumps(result_data, indent=2, ensure_ascii=False),
+        encoding="utf-8"
+    )
+    return report_path
 
 
 def export_model(result, output_dir: Path, base_name: str, formats: list) -> list:
@@ -214,6 +286,10 @@ def main():
                         help='プレビュー画像を生成')
     parser.add_argument('--json', action='store_true',
                         help='結果をJSON形式で出力')
+    parser.add_argument('--report', action='store_true',
+                        help='検査結果を outputs/reports/[name]-cad-summary.json に保存')
+    parser.add_argument('--fail-on-invalid', action='store_true',
+                        help='isValid() が False の場合に非ゼロ終了する')
 
     args = parser.parse_args()
 
@@ -234,6 +310,7 @@ def main():
         "validation": {},
         "exported_files": [],
         "preview": None,
+        "report": None,
         "errors": []
     }
 
@@ -260,8 +337,26 @@ def main():
         # 情報出力
         bb = validation["bounding_box"]
         print(f"Size: {bb.get('x_len', 0):.2f} x {bb.get('y_len', 0):.2f} x {bb.get('z_len', 0):.2f} mm")
-        print(f"Volume: {validation['volume']:.2f} mm³")
-        print(f"Surface Area: {validation['area']:.2f} mm²")
+        print(f"Volume: {validation['volume']:.2f} mm^3")
+        print(f"Surface Area: {validation['area']:.2f} mm^2")
+        center = validation.get("center_of_mass")
+        if center:
+            print(f"Center of Mass: {center['x']:.2f}, {center['y']:.2f}, {center['z']:.2f} mm")
+        topology = validation.get("topology", {})
+        print(
+            "Topology: "
+            f"{topology.get('solids', 0)} solids, "
+            f"{topology.get('faces', 0)} faces, "
+            f"{topology.get('edges', 0)} edges, "
+            f"{topology.get('vertices', 0)} vertices"
+        )
+
+        if args.fail_on_invalid and not validation["valid"]:
+            if args.report:
+                report_path = write_report(result_data, args.output, base_name)
+                print(f"  Report: {report_path}")
+            print("Error: Shape validation failed and --fail-on-invalid was set", file=sys.stderr)
+            sys.exit(2)
 
         # エクスポート
         print(f"Exporting to: {args.output}")
@@ -278,6 +373,10 @@ def main():
             if preview:
                 result_data["preview"] = preview
                 print(f"  Preview: {preview}")
+
+        if args.report:
+            report_path = write_report(result_data, args.output, base_name)
+            print(f"  Report: {report_path}")
 
         # 成功
         print("\nDone!")
