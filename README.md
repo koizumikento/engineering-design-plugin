@@ -4,7 +4,7 @@
 
 このリポジトリでは `skills/` を正本とし、エージェントが読むべき運用知識は `SKILL.md` と `references/`、`templates/`、`scripts/` に集約しています。OpenAI/Codex 向けのメタデータは各スキルの `agents/openai.yaml` に置き、Claude Code 向けにはインストール用メタデータとして `.claude-plugin/` を残しています。
 
-Codex plugin 対応では、`plugins/engineering-design` を plugin root として扱います。plugin root から `skills/` は symlink 参照し、既存の `skills/` 構成をそのまま配布対象にします。.claude-plugin/ はそのまま残し、repo ルートに Claude の manifest と Codex 用 marketplace を共存させます。
+Codex plugin 対応では、`plugins/engineering-design` を plugin root として扱います。plugin root には `skills/` を実ディレクトリとして同梱し、GitHub からのインストール時に symlink へ依存しない構成にしています。.claude-plugin/ はそのまま残し、repo ルートに Claude の manifest と Codex 用 marketplace を共存させます。
 
 ## できること
 
@@ -60,7 +60,7 @@ sudo apt install kicad
 
 - 必須 manifest: `plugins/engineering-design/.codex-plugin/plugin.json`
 - bundled skills: `plugins/engineering-design/skills/`
-- source-of-truth: `skills/*/SKILL.md`
+- source-of-truth: `skills/*/SKILL.md`（配布前に bundled skills へ同期）
 - Claude Code 互換: `.claude-plugin/` を同じ repo ルートに維持
 
 この repo を Codex で開くと、repo-local marketplace [`.agents/plugins/marketplace.json`](/Users/koizumikenjin/workspace/engineering-design-plugin/.agents/plugins/marketplace.json) から `plugins/engineering-design` を指す `engineering-design` plugin を install できます。
@@ -111,7 +111,7 @@ engineering-design-plugin/
 │   └── engineering-design/  # Codex plugin root
 │       ├── .codex-plugin/
 │       │   └── plugin.json
-│       └── skills -> ../../skills
+│       └── skills/          # GitHub install 用に同梱
 ├── skills/                   # エージェントが参照する主定義
 │   ├── spec-writing/
 │   │   ├── SKILL.md

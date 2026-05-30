@@ -2,6 +2,10 @@
   "name": "engineering-design",
   "version": "1.0.0",
   "description": "Engineering design skills for specification writing, mechanical CAD, circuit design, and system integration.",
+  "author": {
+    "name": "Koizumi Kento",
+    "url": "https://github.com/koizumikento"
+  },
   "repository": "https://github.com/koizumikento/engineering-design-plugin",
   "license": "MIT",
   "skills": "./skills/",
@@ -11,6 +15,11 @@
     "longDescription": "Generate engineering specifications and run mechanical CAD, circuit design, and board-to-enclosure integration workflows from natural language requests.",
     "developerName": "Koizumi Kento",
     "category": "Productivity",
+    "capabilities": [
+      "Write",
+      "Generate",
+      "Analyze"
+    ],
     "defaultPrompt": "Use this plugin for engineering specification writing, mechanical CAD, circuit design, and enclosure-PCB integration work."
   }
 }

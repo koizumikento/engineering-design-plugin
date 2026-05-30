@@ -1,0 +1,7 @@
+interface:
+  display_name: "Spec Writing"
+  short_description: "Create or refine engineering design specifications from natural-language requirements."
+  default_prompt: "Use this skill to create or refine a reviewable Markdown engineering specification under specs/ using templates/spec/."
+
+policy:
+  allow_implicit_invocation: true
