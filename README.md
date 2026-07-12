@@ -1,248 +1,161 @@
 # Engineering Design Agent Skills
 
-機械設計、電子回路設計、統合設計を扱うためのエージェントスキル集です。自然言語の要望から仕様書を作り、CadQuery と SKiDL を使った設計作業につなげます。
+自然言語の要望を、検証可能な仕様、CadQuery機械モデル、SKiDL/KiCad回路、PCB・筐体統合チェックへつなぐCodex向けスキル集です。
 
-このリポジトリでは `skills/` を正本とし、エージェントが読むべき運用知識は `SKILL.md` と `references/`、`templates/`、`scripts/` に集約しています。OpenAI/Codex 向けのメタデータは各スキルの `agents/openai.yaml` に置き、Claude Code 向けにはインストール用メタデータとして `.claude-plugin/` を残しています。
+`skills/` が唯一の運用正本です。各 `SKILL.md` は中核ワークフロー、`references/` は必要時だけ読む技術資料、`agents/openai.yaml` はUIメタデータを保持します。
 
-Codex plugin 対応では、開発用の正本を `plugins/engineering-design` に置き、GitHub install 用の配布コピーを `.agents/plugins/engineering-design` に同梱します。GitHub marketplace 追加時に Codex が `.agents/plugins` だけを sparse checkout しても plugin root と skills が揃う構成です。.claude-plugin/ はそのまま残し、repo ルートに Claude の manifest と Codex 用 marketplace を共存させます。
+## Skills
 
-## できること
+| Skill | 主な責務 | 主な成果物 |
+|---|---|---|
+| `spec-writing` | 要求抽出、ID、根拠、interface、検証計画 | `specs/*.md` |
+| `mechanical-cad` | CadQuery設計、STEP-first export、形状検証 | `.py`, STEP, STL, PNG, JSON report |
+| `circuit-design` | SKiDL回路、BOM/ERC、KiCad 9、任意simulation | `.py`, BOM, ERC, `.kicad_sch`, simulation |
+| `integration` | PCB・筐体の座標、取付、開口、envelope整合 | integration report |
 
-- **仕様策定**: 自然言語要望から機械/回路/統合仕様書を生成
-- **機械設計**: CadQuery による 3D CAD モデル生成、STEP-first 出力、STL/PNG、検査レポート
-- **回路設計**: SKiDL による回路生成、BOM、ERC summary、設計メモ、KiCad v9 正本回路図出力
-- **追加検証**: ネットリスト、SPICE シミュレーション、3D プレビュー生成
-- **統合設計**: 基板と筐体の整合性チェック
+設計値は承認済み仕様、メーカー一次資料、現行規格、工程能力の順に根拠を持たせます。genericな肉厚、穴径、開口、pull-up、decoupling値を規格値として扱いません。
 
-## 含まれるスキル
+## Setup
 
-- `spec-writing`: 自然言語から機械/回路/統合仕様書を生成
-- `mechanical-cad`: CadQuery による 3D CAD モデル生成、STEP-first 出力、検査レポート、複数視点プレビュー
-- `circuit-design`: SKiDL による回路設計、回路図生成、SPICE シミュレーション
-- `integration`: 基板と筐体の整合性チェック
-
-各スキルは以下の構成に寄せています。
-
-- `SKILL.md`: 実行手順とトリガー条件
-- `references/`: 必要になったときだけ読む参照資料
-- `agents/openai.yaml`: OpenAI/Codex 向けの表示名、短い説明、既定プロンプト、起動ポリシー
-
-## セットアップ
-
-### 前提条件
+前提:
 
 - `uv`
-- Python 3.9 以上、3.14 未満（CadQuery/OCP wheel の対応範囲に合わせる）
-- CadQuery / SKiDL / PySpice などの関連ライブラリを実行できる環境
-- KiCad v9（ネイティブ回路図 `.kicad_sch` / `.kicad_pro` の生成とプレビューに使用）
-
-### Python 依存関係
+- Python 3.9以上3.14未満
+- KiCad 9（KiCad schematic validationを行う場合）
+- ngspice（SPICE analysisを行う場合）
+- optional: VTK（PNG preview）
 
 ```bash
 uv sync
 ```
 
-### システム依存関係
+環境確認:
 
 ```bash
-# macOS
-brew install openscad ngspice
-brew install --cask kicad
-
-# Ubuntu/Debian
-sudo apt install openscad ngspice
-sudo apt install kicad
+uv run python -c "import cadquery, skidl; print(cadquery.__version__, skidl.__version__)"
+kicad-cli --version
+ngspice --version
 ```
 
-### Codex plugin として使う
+## Codex plugin
 
-この repo は `plugins/engineering-design` を plugin root として扱います。
-
-- 必須 manifest: `plugins/engineering-design/.codex-plugin/plugin.json`
-- GitHub install 用 plugin root: `.agents/plugins/engineering-design/`
-- GitHub install 互換 manifest: `.agents/plugins/engineering-design/plugin.json`
-- bundled skills: `plugins/engineering-design/skills/`
-- source-of-truth: `skills/*/SKILL.md`（配布前に bundled skills へ同期）
-- Claude Code 互換: `.claude-plugin/` を同じ repo ルートに維持
-
-この repo を Codex で開くと、repo-local marketplace [`.agents/plugins/marketplace.json`](/Users/koizumikenjin/workspace/engineering-design-plugin/.agents/plugins/marketplace.json) から `plugins/engineering-design` を指す `engineering-design` plugin を install できます。
-
-必要なら Codex を再起動して、Plugin Directory から `Engineering Design` を `+` で install します。
-
-## 基本ワークフロー
-
-### 1. 仕様書を作る
-
-`spec-writing` を使って `templates/spec/` ベースの仕様書を `specs/` に生成します。
+repo-local marketplaceは `.agents/plugins/marketplace.json` です。entryは `plugins/engineering-design` を指し、そのmanifestがrepo rootの `skills/` を参照します。client別のskillコピーやsymlinkは置きません。
 
 ```text
-温度センサー用の防水筐体の仕様書を作って
-spec-writing を使って ESP32 センサーデバイスの統合仕様をまとめて
+.agents/plugins/marketplace.json
+        -> plugins/engineering-design/.codex-plugin/plugin.json
+        -> skills/
 ```
 
-### 2. 設計コードを作る
+- plugin manifest: `plugins/engineering-design/.codex-plugin/plugin.json`
+- installer互換manifest: `plugins/engineering-design/plugin.json`
+- source of truth: `skills/`
 
-- 機械設計は `mechanical-cad` を使って `scripts/cadquery_runner.py` で STEP/STL と検査レポートを生成
-- 回路設計は `circuit-design` を使って `skills/circuit-design/scripts/skidl_runner.py` と `skills/circuit-design/scripts/kicad_sch_export.py` で BOM / ERC summary / 設計メモ / KiCad 正本を生成
+Plugin Directoryで `Engineering Design` をinstallまたは再installし、新しいtaskで更新後のskillsを試してください。
 
-```text
-mechanical-cad を使って specs/sensor-enclosure-spec.md から CadQuery コードを生成して
-circuit-design を使って specs/led-driver-spec.md から SKiDL コードと KiCad 正本を生成して
-```
+## Workflow
 
-機械設計では STEP を一次成果物として扱い、形状変更時は検査レポートと複数視点プレビューを標準で確認します。
+### 1. Specification
+
+`spec-writing` は要求ごとにID、source/rationale、acceptance、verification methodを付けます。低riskのconceptは仮定を明記して進められますが、production、安全、法規、不可逆変更に影響する未決事項は解消してからreleaseします。
+
+Templates:
+
+- `templates/spec/mechanical-spec.md`
+- `templates/spec/circuit-spec.md`
+- `templates/spec/integrated-spec.md`
+
+### 2. Mechanical CAD
 
 ```bash
+uv run python -m py_compile input.py
 uv run python scripts/cadquery_runner.py input.py -o outputs/ --report --fail-on-invalid
 uv run python scripts/preview_generator.py outputs/input.step -o outputs/ --all-views
 ```
 
-### 3. 任意の追加出力を作る
+CadQuery Pythonをparameterized design definition、STEPをneutral geometry exchange、STL/3MF/DXF/SVG/PNGを用途別の派生成果物として扱います。`isValid()` はBREP整合性であり、寸法、干渉、強度、工程適合を自動保証しません。
 
-- 3D プレビュー: `scripts/preview_generator.py --all-views`
-- 必要時のみのネットリスト: `skills/circuit-design/scripts/skidl_runner.py --netlist`
-- SPICE シミュレーション: `skills/circuit-design/scripts/pyspice_sim.py --dc|--ac|--tran`
-- `skills/circuit-design/scripts/kicad_sch_export.py` はサポート済みトポロジーから KiCad v9 ネイティブ回路図を生成する。未対応回路はこの exporter を拡張する
-- `skills/circuit-design/scripts/kicad_env.py` は KiCad ライブラリ環境変数と `fp-lib-table` / `sym-lib-table` を初期化する
+### 3. Circuit design
 
-### 4. 統合チェックを行う
+```bash
+uv run python -m py_compile input.py
+uv run python skills/circuit-design/scripts/skidl_runner.py input.py -o outputs/
+uv run python skills/circuit-design/scripts/kicad_sch_export.py input.py -o outputs/
+```
 
-`integration` を使って `scripts/integration_checker.py` で基板と筐体の整合性を確認します。
+repository exporterは確認済みtopology向けです。一般回路ではSKiDL 2.2の `generate_schematic()` も候補にし、生成後にKiCad 9で独立検証します。
 
-## ディレクトリ構造
+```bash
+kicad-cli sch erc --exit-code-violations --format json -o outputs/reports/project-kicad-erc.json outputs/kicad/project/project.kicad_sch
+```
+
+Optional:
+
+```bash
+uv run python skills/circuit-design/scripts/skidl_runner.py input.py -o outputs/ --netlist
+uv run python skills/circuit-design/scripts/pyspice_sim.py input.py -o outputs/ --dc
+uv run python skills/circuit-design/scripts/pyspice_sim.py input.py -o outputs/ --ac
+uv run python skills/circuit-design/scripts/pyspice_sim.py input.py -o outputs/ --tran
+```
+
+Simulationは使用modelとscenarioの範囲だけを立証します。MPN、pin mapping、model revision、corner、acceptance criterionを記録してください。
+
+### 4. PCB-enclosure integration
+
+```bash
+uv run python scripts/integration_checker.py specs/project-integrated-spec.md -o outputs/ --json
+```
+
+CLI overrideは承認済み要求または明記した工程仮定から与えます。
+
+```bash
+uv run python scripts/integration_checker.py specs/project-integrated-spec.md -o outputs/ --clearance 1.2 --z-clearance 1.0 --tolerance 0.25 --fail-on-fail
+```
+
+checkerはMarkdownの公称寸法screeningです。3D interference、最悪公差、plug/latch/cable/tool envelope、thermal、EMC/ESD、IP testを評価しません。未評価項目はreportに残ります。
+
+## Repository layout
 
 ```text
 engineering-design-plugin/
-├── .agents/
-│   └── plugins/
-│       ├── marketplace.json # Codex repo-local marketplace
-│       └── engineering-design/ # GitHub install 用 plugin root
-├── plugins/
-│   └── engineering-design/  # Codex plugin root
-│       ├── plugin.json      # installer 互換 manifest
-│       ├── .codex-plugin/
-│       │   └── plugin.json
-│       └── skills/          # GitHub install 用に同梱
-├── skills/                   # エージェントが参照する主定義
+├── .agents/plugins/marketplace.json
+├── plugins/engineering-design/
+│   ├── .codex-plugin/plugin.json
+│   └── plugin.json
+├── skills/
 │   ├── spec-writing/
-│   │   ├── SKILL.md
-│   │   ├── agents/openai.yaml
-│   │   └── references/
 │   ├── mechanical-cad/
 │   ├── circuit-design/
 │   └── integration/
-├── .claude-plugin/           # Claude Code インストール用メタデータ
-├── scripts/                  # 複数スキルで共有する実行スクリプト
-├── templates/                # 仕様書や設計テンプレート
-├── examples/                 # サンプルプロジェクト
-├── docs/                     # 設計メモと移行後の構成説明
-├── README.md
-└── LICENSE
+├── scripts/
+├── templates/
+├── examples/
+└── docs/
 ```
 
-`circuit-design` 専用スクリプトは [skills/circuit-design/scripts](/Users/koizumikenjin/workspace/engineering-design-plugin/skills/circuit-design/scripts) に置き、共有物だけを repo 直下の [scripts](/Users/koizumikenjin/workspace/engineering-design-plugin/scripts) に残しています。
+`skills/circuit-design/scripts/` は回路固有helper、root `scripts/` は共有helperです。
 
-## サンプルプロジェクト
+## Examples
 
-### sensor-enclosure
+- `examples/calibration-block`: CadQuery validation/report/preview
+- `examples/sensor-enclosure`: enclosure model
+- `examples/voltage-divider`, `rc-lowpass-filter`: passive circuit examples
+- `examples/non-inverting-amplifier`, `inverting-amplifier`: op-amp examples
+- `examples/linear-regulator`, `led-driver`: power/load examples
+- `examples/iot-device`: mechanical/electronic integrated example
 
-温度センサー用の防水筐体（IP65相当）
+Examplesは教育・回帰用であり、部品値、開口、IP表現、製造公差をそのままproduction designへ流用しないでください。
 
-```bash
-cd examples/sensor-enclosure
-uv run python src/enclosure.py
-```
+## References
 
-### calibration-block
+- CadQuery: `skills/mechanical-cad/references/`
+- SKiDL/KiCad/ngspice: `skills/circuit-design/references/`
+- requirements and verification: `skills/spec-writing/references/spec-templates.md`
+- interface control and integration: `skills/integration/references/interface-spec.md`
+- architecture: `docs/engineering-design-plugin-spec.md`
 
-`cadquery_runner.py` の検査レポートと複数視点プレビューを確認するための小型校正ブロックです。
+規格本文は同梱しません。referenceは公式カタログと一次資料へのsource mapとして使い、案件ごとに適用版と本文を確認します。
 
-```bash
-uv run python scripts/cadquery_runner.py examples/calibration-block/src/calibration_block.py -o examples/calibration-block/outputs --report --fail-on-invalid
-uv run python scripts/preview_generator.py examples/calibration-block/outputs/calibration_block.step -o examples/calibration-block/outputs --all-views
-```
-
-### led-driver
-
-5V入力でLED3個を並列駆動する回路
-
-```bash
-cd examples/led-driver
-uv run python src/led_driver.py
-```
-
-### rc-lowpass-filter
-
-1kHz の 1次 RC ローパスフィルタ。`VIN` / `VOUT` / `GND` を明示し、AC 特性の目安を表示する sample です。
-
-```bash
-uv run python examples/rc-lowpass-filter/src/circuit.py
-uv run python skills/circuit-design/scripts/skidl_runner.py examples/rc-lowpass-filter/src/circuit.py -o examples/rc-lowpass-filter/outputs
-```
-
-### voltage-divider
-
-5V から約 3.3V を得る 2 抵抗の分圧回路。後段が高インピーダンス入力であることを前提にした最小構成 sample です。
-
-```bash
-uv run python examples/voltage-divider/src/circuit.py
-uv run python skills/circuit-design/scripts/skidl_runner.py examples/voltage-divider/src/circuit.py -o examples/voltage-divider/outputs
-```
-
-### non-inverting-amplifier
-
-TL072 を使った両電源の非反転増幅回路（ゲイン +11）。`KiCad v9` ネイティブ回路図と、外部 `VIN` / `VOUT` を明示した I/O 付きのサンプルです。
-
-```bash
-uv run python skills/circuit-design/scripts/skidl_runner.py examples/non-inverting-amplifier/src/circuit.py -o examples/non-inverting-amplifier/outputs
-uv run python skills/circuit-design/scripts/kicad_sch_export.py examples/non-inverting-amplifier/src/circuit.py -o examples/non-inverting-amplifier/outputs
-```
-
-標準生成物は `outputs/reports/` に `-bom.csv`, `-erc-summary.md`, `-design-summary.md`、`outputs/kicad/[project-name]/` に `.kicad_sch`, `.kicad_pro` をまとめます。必要に応じて `--netlist` を追加します。
-
-### inverting-amplifier
-
-TL072 を使った両電源の反転増幅回路（ゲイン -10）。既存の非反転 sample と比較しやすい構成で、未使用チャネル終端とデカップリングも含みます。
-
-```bash
-uv run python examples/inverting-amplifier/src/circuit.py
-uv run python skills/circuit-design/scripts/skidl_runner.py examples/inverting-amplifier/src/circuit.py -o examples/inverting-amplifier/outputs
-```
-
-### linear-regulator
-
-`L7805` を使った 9V-15V 入力から 5V を生成する線形レギュレータ回路。入出力コネクタと安定化コンデンサを含む電源 sample です。
-
-```bash
-uv run python examples/linear-regulator/src/circuit.py
-uv run python skills/circuit-design/scripts/skidl_runner.py examples/linear-regulator/src/circuit.py -o examples/linear-regulator/outputs
-```
-
-`non-inverting-amplifier` 以外の新規回路は、現状の `kicad_sch_export.py` が未対応のため `.kicad_sch` / `.kicad_pro` はまだ生成できません。KiCad 正本が必要なら exporter を拡張します。
-
-### iot-device
-
-ESP32 を使った温湿度センサーデバイス（筐体+回路の統合設計）
-
-```bash
-cd examples/iot-device
-uv run python src/enclosure.py
-uv run python src/circuit.py
-```
-
-## リファレンス
-
-- `skills/mechanical-cad/references/cadquery-api.md` - CadQuery API リファレンス
-- `skills/mechanical-cad/references/jis-drawing.md` - JIS 製図規格
-- `skills/mechanical-cad/references/templates.md` - テンプレート集
-- `skills/mechanical-cad/references/export-policy.md` - STEP-first 出力形式の使い分け
-- `skills/mechanical-cad/references/off-the-shelf-parts.md` - 既製部品 STEP/CAD の扱い
-- `skills/mechanical-cad/references/assembly-positioning.md` - 組立、データム、クリアランスの整理
-- `skills/circuit-design/references/skidl-api.md` - SKiDL API リファレンス
-- `skills/circuit-design/references/kicad-v9-workflow.md` - KiCad v9 ネイティブ運用メモ
-- `skills/circuit-design/references/circuit-patterns.md` - 回路パターン集
-- `skills/circuit-design/references/spice-guide.md` - SPICE シミュレーションガイド
-
-## ライセンス
+## License
 
 MIT License

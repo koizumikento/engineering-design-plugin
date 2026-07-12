@@ -1,71 +1,39 @@
 ---
 name: integration
-description: |
-  機械-電子統合設計。以下の場合に使用:
-  (1) 「筐体と回路を一緒に設計」「基板を収める筐体」などの統合設計リクエスト
-  (2) 基板-筐体の整合性チェック
-  (3) コネクタ位置と開口部の照合
-  入力: 統合仕様書
-  出力: 整合性レポート
-allowed-tools: Read, Glob, Grep, Edit, Write, Bash
+description: Validate mechanical-electrical interfaces between a PCB, enclosure, connectors, controls, cables, thermal features, and mounting hardware. Use when checking board-to-enclosure fit, coordinate transforms, mounting alignment, keep-outs, access, assembly/service envelopes, or interface traceability. Do not use a text-only screening result as proof of full 3D interference, thermal, EMC, ingress, or compliance performance.
 ---
 
-# Integration Skill
+# PCB-Enclosure Integration
 
-## ワークフロー
+## Workflow
 
-1. **仕様書の統合**
-   - [ ] 機械設計仕様書と回路設計仕様書を読み込み
-   - [ ] 基板-筐体インターフェース情報を抽出
+1. Collect the integrated specification, PCB outline/stackup, mounting-hole coordinates, component and connector envelopes, enclosure geometry, hardware drawings, cable bend/service envelopes, and applicable acceptance criteria.
+2. Define one assembly coordinate frame and transform every PCB and enclosure datum into it. Record axis directions, origin, units, board side, and reference surfaces; do not compare unlabeled coordinate pairs.
+3. Build an interface control table with stable IDs. For each interface record both owners, source revision, nominal geometry, tolerance, required clearance/alignment, verification method, and evidence.
+4. Run the text-spec screening check when the specification contains machine-readable dimensions:
 
-2. **整合性チェック**
    ```bash
-   uv run python scripts/integration_checker.py specs/[project-name]-integrated-spec.md -o outputs/
+   uv run python scripts/integration_checker.py <specs/project-integrated-spec.md> -o <outputs/> --json
    ```
-   - [ ] 基板外形と筐体内寸の適合性
-   - [ ] コネクタ位置と開口部位置の一致
-   - [ ] 取付穴位置の整合
 
-3. **干渉検出**
-   - [ ] 基板と筐体内壁のクリアランス
-   - [ ] 部品高さと筐体高さの確認
-   - [ ] コネクタ挿抜スペースの確認
+   Pass `--clearance` and `--tolerance` only from the approved requirement or documented process assumption. The checker is a screening tool; missing data or unsupported checks must remain visible and must not become a pass.
+5. When STEP/BREP/board 3D data is available, perform geometric checks in the common frame: containment, minimum gap, mounting alignment, connector/opening overlap, component-to-lid/wall clearance, fastener/tool access, cable and user-access envelopes, and assembly path.
+6. Review non-geometric interfaces: power/grounding, heat path, airflow, sealing surfaces, vent/sensor exposure, ESD/EMC features, labeling, serviceability, and manufacturing sequence. Route specialist analysis or testing where required.
+7. Classify every result as pass, fail, conditional, or not evaluated. Link it to the requirement and evidence; do not collapse unknowns into a single overall pass.
+8. Produce `outputs/<project>-integration-report.md` with assumptions, source revisions, coordinate convention, margins, conflicts, unsupported checks, and corrective actions.
 
-4. **レポート出力**
-   - `outputs/[project-name]-integration-report.md`
+## Minimum checks
 
-## 実行後の確認
+- PCB outline and thickness versus enclosure and insertion path.
+- Mounting-hole/boss position, diameter, fastener stack, and tolerance accumulation.
+- Top-side and bottom-side component envelopes versus lid, floor, walls, and hardware.
+- Connector datum and opening size, including plug shell, latch, finger/tool access, and cable bend radius.
+- Controls, indicators, antennas, sensors, vents, and exposed surfaces.
+- Assembly order, removable parts, screw/tool approach, rework and service access.
+- Heat sources, heat paths, airflow obstruction, and temperature-sensitive parts.
+- Sealing path and penetrations when an ingress requirement exists; rating requires the applicable test evidence.
 
-- [ ] クリアランス不足、穴位置ずれ、開口位置ずれがレポート化されている
-- [ ] 基板寸法、部品高さ、コネクタ位置の元データに齟齬がない
+## Reference routing
 
-## 基板-筐体インターフェース定義
-
-| 項目 | 基板側 | 筐体側 | チェック内容 |
-|------|--------|--------|-------------|
-| 基板サイズ | WxHmm | 内寸W+4xH+4mm | 各辺2mm以上のクリアランス |
-| 取付穴 | M2.5×4箇所 | ボス高5mm | 位置が±0.5mm以内で一致 |
-| コネクタ | 側面配置(位置,サイズ) | 開口位置 | 位置・サイズが一致 |
-| 部品高さ | 最大高 | 内部高さ | 部品高+2mm ≤ 内部高さ |
-
-## 設計ガイドライン
-
-### クリアランス
-
-| 項目 | 最小 | 推奨 |
-|------|------|------|
-| 基板端-筐体壁 | 1.0mm | 2.0mm |
-| 部品上面-蓋 | 1.0mm | 2.0mm |
-| コネクタ側面-開口部 | 0.5mm | 1.0mm |
-
-### 取付方式
-
-| 方式 | ボス高さ | 用途 |
-|------|---------|------|
-| ねじ固定 | ねじ長+1mm | 確実な固定が必要 |
-| スナップフィット | 基板厚+0.5mm | 工具不要の組立 |
-| ガイドレール | 基板厚+0.3mm | 差し込み式 |
-
-## 詳細
-
-`references/interface-spec.md`を参照
+- Read `references/interface-spec.md` for coordinate frames, interface tables, tolerance stacks, envelopes, verification methods, and current standards-source guidance.
+- Read the mechanical and circuit references for process-specific geometry, exact component data, schematic boundaries, or simulation evidence.

@@ -1,33 +1,35 @@
-# 既製部品CADの扱い
+# 既製部品CAD・図面の扱い
 
-## 目的
+## Source priority
 
-ねじ、ナット、ワッシャ、ベアリング、モーター、サーボ、コネクタ、開発基板などは、寸法を推定して簡略形状を作る前に、メーカーまたは信頼できるカタログのSTEP/CADデータを探す。
+1. メーカー公式CADと寸法図
+2. メーカー公式datasheet/product page
+3. 採用代理店がメーカー提供物として明示するCAD
+4. 規格品の適用規格と購入仕様
+5. 実測
+6. 暫定envelope
 
-## 調査順序
+型式なしの一般名だけで精密な開口、嵌合、穴、熱設計を確定しない。
 
-1. exact model number（例: `USB4085-GF-A`, `608ZZ`, `MG996R`）
-2. vendor alias または distributor page
-3. standard designation（例: `M3 socket head cap screw`, `608 bearing`）
-4. 見つからない場合は、仕様書・データシート・実測値を元にenvelope geometryを作る
+## Provenance record
 
-## 記録すること
+- manufacturer / exact MPN
+- document or CAD title
+- revision/date and retrieval date
+- source URL or controlled file path
+- units and coordinate convention
+- license/use restriction if stated
+- used dimensions and simplifications
+- mismatch between CAD, drawing, and sample if found
 
-- 部品名、型番、メーカー
-- STEP/CADまたはデータシートの入手元
-- 使用した寸法と単位
-- 見つからなかった場合の検索語と、簡略化した範囲
+## Model strategy
 
-## モデリング方針
+- 統合確認に必要な外形、datum、mounting、mating、keep-outを優先する。
+- ネジ山、ロゴ、微細外観など解析不要のdetailを抑える。
+- メーカーCADの原点・向きをそのまま信用せず、drawing datumと照合する。
+- geometryを簡略化しても、最大包絡と機能面は縮めない。
+- connectorはreceptacleだけでなくmating plug、latch、cable/service envelopeを持つ。
 
-- CADデータがある場合は、そのSTEPを組立参照に使う
-- CADデータがない場合は、干渉確認に必要な外形、取付穴、嵌合面、コネクタ開口だけを作る
-- 外観ディテールより、境界寸法、穴位置、クリアランスを優先する
-- 公差、認証、強度、製造保証は根拠なしに主張しない
+## Missing data
 
-## 報告例
-
-```text
-USB-Cコネクタは型番未指定のため、9.0 x 3.2mmの開口 envelope としてモデル化した。
-正確な嵌合確認には採用予定コネクタのSTEPまたはデータシート寸法が必要。
-```
+暫定モデルには `PROVISIONAL`、根拠、最大包絡、未確認項目を記載する。暫定値から規格適合、公差、強度、寿命を主張しない。

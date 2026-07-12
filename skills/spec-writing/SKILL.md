@@ -1,56 +1,44 @@
 ---
 name: spec-writing
-description: |
-  設計仕様書の作成。以下の場合に使用:
-  (1) 「仕様書を作成」「設計要件をまとめて」などのリクエスト
-  (2) 機械設計・回路設計の要件整理
-  (3) 統合設計の仕様策定
-  入力: 自然言語要望
-  出力: Markdown仕様書
-allowed-tools: Read, Glob, Grep, Edit, Write, Bash
+description: Create or refine reviewable Markdown specifications for mechanical, electronic, or PCB-enclosure integrated designs. Use when requirements must be elicited, made testable, assigned identifiers and verification methods, or recorded under specs/ before or alongside engineering work. Do not use for implementation-only requests with already sufficient requirements.
 ---
 
-# 仕様書作成スキル
+# Engineering Specification Writing
 
-## ワークフロー
+## Workflow
 
-1. **要望分析**
-   - [ ] 設計対象の種類を判定（機械/回路/統合）
-   - [ ] 明示的要件と暗黙的要件を抽出
-   - [ ] 不明点をリストアップ
+1. Inspect the request, existing specifications, drawings, datasheets, models, and repository conventions before asking questions.
+2. Classify the design as mechanical, circuit, or integrated, and state the intended maturity: concept, prototype, or production handoff.
+3. Separate supplied facts, derived requirements, assumptions, constraints, and unresolved items. Do not silently convert an example or rule of thumb into a requirement.
+4. Ask only for missing information that materially changes safety, architecture, interfaces, manufacturing, or acceptance. For low-risk exploratory work, proceed with clearly labeled assumptions.
+5. Copy the closest template from `templates/spec/` and replace placeholders. Store the result as:
+   - `specs/<project>-spec.md` for a mechanical or circuit design
+   - `specs/<project>-integrated-spec.md` for a coupled mechanical/electronic design
+6. Give each normative requirement a stable ID. Record the source or rationale, acceptance criterion, and verification method: inspection, analysis, demonstration, or test.
+7. Define interfaces with units, coordinate frame, datum, direction, min/nominal/max values, tolerance, and ownership on both sides.
+8. Record each TBD/TBR with an owner, resolution action, and due milestone. Do not represent unresolved values as approved.
+9. Run the quality gate below and report the remaining assumptions and blocking decisions.
 
-2. **対話による明確化**
-   不明な場合は質問:
-   - 寸法・公差の詳細
-   - 材質・部品の選定基準
-   - インターフェース仕様
-   - 希望する出力形式
+## Quality gate
 
-3. **仕様書生成**
-   - `templates/spec/` のテンプレートを使用
-   - 要件をチェックリスト形式で記載
-   - 数値仕様は表形式で整理
+- Each requirement expresses one obligation and has a unique ID.
+- Quantitative limits include units, conditions, and tolerance or min/max bounds.
+- Functional requirements state what is needed; implementation choices are constraints only when genuinely required.
+- Interface values use the same coordinate system and datum on both sides.
+- Every requirement has a feasible success criterion and verification method.
+- Safety, regulatory, environmental, and manufacturing claims cite the applicable current source and edition.
+- Conflicts, derived values, assumptions, TBDs, and TBRs are visible.
+- The requested outputs and release maturity are explicit.
 
-4. **ファイル出力**
-   - 機械設計・回路設計: `specs/[project-name]-spec.md`に保存
-   - 統合設計: `specs/[project-name]-integrated-spec.md`に保存
-   - ユーザーに確認・承認を依頼
+## Readiness
 
-## 仕様書の品質基準
+- `Draft`: suitable for exploration; implementation may proceed only with assumptions reported.
+- `Review`: major requirements exist, but listed decisions remain open.
+- `Approved`: the named reviewer or user has accepted the baseline and its unresolved-item disposition.
 
-- [ ] すべての要件が検証可能（数値化・具体化）
-- [ ] 曖昧な表現がない（「適切な」「十分な」等を排除）
-- [ ] 設計制約が明記されている
-- [ ] 出力形式が指定されている
+Do not require formal approval for harmless concept work the user explicitly asked to explore. Do require a decision before irreversible, safety-critical, compliance-sensitive, or production-release work when an unresolved item can materially change the result.
 
-## 設計対象の判定基準
+## References
 
-| キーワード | 設計対象 | テンプレート |
-|-----------|---------|-------------|
-| 筐体、ボックス、ケース、シャフト、ブラケット | 機械設計 | `mechanical-spec.md` |
-| 回路、LED、抵抗、コンデンサ、オペアンプ | 回路設計 | `circuit-spec.md` |
-| 基板を収める、IoT、センサーデバイス | 統合設計 | `integrated-spec.md` |
-
-## 詳細
-
-`references/spec-templates.md`を参照
+- Read `references/spec-templates.md` for requirement syntax, traceability, verification planning, and template guidance.
+- Read the target design skill's focused references when a requirement depends on a current standard, manufacturing process, component datasheet, or tool capability.

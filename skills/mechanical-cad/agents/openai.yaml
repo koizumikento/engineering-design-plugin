@@ -1,7 +1,4 @@
 interface:
   display_name: "Mechanical CAD"
-  short_description: "Generate CadQuery-based mechanical designs with STEP-first outputs, validation reports, and previews."
-  default_prompt: "Use this skill to turn an approved mechanical specification into CadQuery code, validate the shape, export STEP/STL outputs, and generate review previews when geometry changes."
-
-policy:
-  allow_implicit_invocation: true
+  short_description: "Build and validate parametric CadQuery designs."
+  default_prompt: "Use $mechanical-cad to create and validate a parametric CadQuery model with the requested engineering artifacts."

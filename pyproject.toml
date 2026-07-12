@@ -1,6 +1,6 @@
 [project]
 name = "engineering-design-plugin"
-version = "0.1.0"
+version = "0.2.0"
 description = "Engineering design agent skills and helper scripts."
 requires-python = ">=3.9,<3.14"
 dependencies = [
@@ -9,7 +9,7 @@ dependencies = [
     "numpy>=1.20",
     "numpy-stl>=2.16",
     "PySpice>=1.5",
-    "skidl>=1.2",
+    "skidl>=2.2.1,<2.3",
 ]
 
 [project.optional-dependencies]

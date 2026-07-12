@@ -1,49 +1,71 @@
-# 組立・位置決め・データム
+# 組立・位置決め・エンベロープ
 
-## 基本方針
+## 基準を先に定義する
 
-複数部品、基板収納、コネクタ開口、嵌合部を扱う場合は、個々の形状を作る前に基準を決める。寸法を直接散らさず、part-local datum、mating plane、clearance envelope、mounting pattern を名前付きパラメータにする。
+- assembly originと軸方向
+- 各part origin
+- primary/secondary/tertiary datum
+- mating/seating plane
+- locating featureとfastening feature
+- transformとrevision
 
-## 定義する基準
+部品を固定する機能と位置決めする機能を分ける。複数の剛体拘束で過拘束にすると、公差内でも組み立たない場合がある。
 
-- assembly origin: 組立全体の原点
-- part origin: 各部品の原点
-- datum plane: XY / YZ / XZ のどの面を基準にするか
-- mating plane: 蓋、底板、ブラケット、基板などの合わせ面
-- mounting pattern: 取付穴の中心座標、穴径、ざぐり/皿穴の有無
-- clearance envelope: 部品外形、可動範囲、ケーブル余長、工具アクセス範囲
+## 座標変換
 
-## PCB収納の確認項目
+インターフェース座標は部品ローカル値のまま比較しない。
 
-- PCB外形と筐体内寸
-- PCB取付穴とボス位置
-- コネクタ位置と筐体開口
-- 部品高さと蓋/壁のクリアランス
-- ケーブルやスイッチ操作に必要な空間
-
-## CadQueryでの書き方
-
-```python
-pcb_width = 50.0
-pcb_depth = 30.0
-pcb_clearance = 2.0
-wall = 2.0
-
-inner_width = pcb_width + 2 * pcb_clearance
-inner_depth = pcb_depth + 2 * pcb_clearance
-outer_width = inner_width + 2 * wall
-outer_depth = inner_depth + 2 * wall
-
-pcb_mount_offset_x = pcb_width / 2 - 3.0
-pcb_mount_offset_y = pcb_depth / 2 - 3.0
-mount_points = [
-    (pcb_mount_offset_x, pcb_mount_offset_y),
-    (-pcb_mount_offset_x, pcb_mount_offset_y),
-    (pcb_mount_offset_x, -pcb_mount_offset_y),
-    (-pcb_mount_offset_x, -pcb_mount_offset_y),
-]
+```text
+point_assembly = transform_part_to_assembly(point_part)
 ```
 
-## 統合設計との接続
+回転、反転、基板上下面、ミラーを含めて確認する。CadQueryでは `cq.Location` を一箇所で構成し、穴・開口・component envelopeへ同じ変換を適用する。
 
-`integration` スキルに渡す可能性がある寸法は、変数名やコメントで追跡できるようにする。特にPCB外形、取付穴、コネクタ開口、部品高さ、蓋とのクリアランスは、仕様書の項目名と対応させる。
+## 許容差スタック
+
+nominal clearanceだけでなく、境界を縮める寄与を列挙する。
+
+```text
+worst_case_margin = nominal_gap
+                  - part_A_size_tolerance
+                  - part_B_size_tolerance
+                  - locating_tolerance
+                  - assembly_shift
+                  - deformation_or_thermal_allowance
+```
+
+統計合成は分布・独立性・許容不良率の根拠がある場合だけ使う。干渉、シール、安全境界は根拠なくRSSへ変更しない。
+
+## エンベロープ
+
+- static envelope: 最大外形
+- keep-out: 接触禁止領域
+- swept envelope: 可動・挿抜軌跡
+- service envelope: 指、工具、測定プローブ、交換作業
+- cable envelope: 曲げ半径、strain relief、引き抜き
+- thermal envelope: 熱膨張、断熱/放熱空間
+
+単純なbounding boxは初期スクリーニングに使えるが、非直交形状や挿入経路の最終判定には不足する。
+
+## PCB収納
+
+- PCB outline、切欠き、厚さ、反り
+- 取付穴と座面、ねじ頭、ワッシャ、インサート
+- top/bottom component envelopes
+- connector receptacle、mating plug、latch、cable
+- antenna/sensor/vent keep-out
+- lid ribs、boss、fastener、seamとの局所干渉
+- assembly orderとrework access
+
+統合仕様の要求IDをCadQueryパラメータ名またはコメントに結び、後でレポートへ追跡できるようにする。
+
+## Verification
+
+- transformとdatumを表でレビュー
+- CAD内のcontainment/overlap/minimum-distance確認
+- 重要寸法の独立計測
+- 最悪公差計算
+- 組立順序のdemonstration
+- 初品または治具によるtest/inspection
+
+CadQuery assemblyの公式機能は[Assemblies](https://cadquery.readthedocs.io/en/stable/assy.html)を参照する。

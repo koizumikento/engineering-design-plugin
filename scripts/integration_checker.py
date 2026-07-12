@@ -1,437 +1,449 @@
 #!/usr/bin/env python3
-"""
-Integration Checker - 基板-筐体の整合性チェック
-
-使用方法:
-    python3 integration_checker.py specs/integrated-spec.md -o outputs/
-"""
+"""Screen machine-readable PCB/enclosure dimensions from an integrated Markdown spec."""
 
 import argparse
 import json
 import re
 import sys
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
-from dataclasses import dataclass
+
+
+NUMBER = r"-?\d+(?:\.\d+)?"
 
 
 @dataclass
 class PCBSpec:
-    """基板仕様"""
-    width: float = 0.0
-    depth: float = 0.0
-    thickness: float = 1.6
-    mounting_holes: List[Tuple[float, float]] = None
-    max_component_height: float = 0.0
-    connectors: List[Dict] = None
-
-    def __post_init__(self):
-        if self.mounting_holes is None:
-            self.mounting_holes = []
-        if self.connectors is None:
-            self.connectors = []
+    width: Optional[float] = None
+    depth: Optional[float] = None
+    thickness: Optional[float] = None
+    mounting_holes: List[Tuple[float, float]] = field(default_factory=list)
+    max_component_height: Optional[float] = None
+    bottom_component_height: Optional[float] = None
+    connectors: List[str] = field(default_factory=list)
 
 
 @dataclass
 class EnclosureSpec:
-    """筐体仕様"""
-    internal_width: float = 0.0
-    internal_depth: float = 0.0
-    internal_height: float = 0.0
-    wall_thickness: float = 2.0
-    boss_positions: List[Tuple[float, float]] = None
-    boss_height: float = 0.0
-    openings: List[Dict] = None
+    internal_width: Optional[float] = None
+    internal_depth: Optional[float] = None
+    internal_height: Optional[float] = None
+    boss_positions: List[Tuple[float, float]] = field(default_factory=list)
+    boss_height: Optional[float] = None
 
-    def __post_init__(self):
-        if self.boss_positions is None:
-            self.boss_positions = []
-        if self.openings is None:
-            self.openings = []
+
+@dataclass
+class AcceptanceCriteria:
+    xy_clearance: Optional[float] = None
+    top_clearance: Optional[float] = None
+    bottom_clearance: Optional[float] = None
+    mounting_tolerance: Optional[float] = None
 
 
 @dataclass
 class CheckResult:
-    """チェック結果"""
     name: str
-    status: str  # "OK", "WARNING", "ERROR"
+    status: str
     message: str
-    details: Dict = None
-
-    def __post_init__(self):
-        if self.details is None:
-            self.details = {}
+    details: Dict = field(default_factory=dict)
 
 
-def parse_spec_file(spec_path: Path) -> Tuple[PCBSpec, EnclosureSpec]:
-    """仕様書ファイルをパース"""
-    content = spec_path.read_text(encoding='utf-8')
-
-    pcb = PCBSpec()
-    enclosure = EnclosureSpec()
-
-    # 基板サイズ
-    pcb_size_match = re.search(r'基板.*?(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)', content, re.IGNORECASE)
-    if pcb_size_match:
-        pcb.width = float(pcb_size_match.group(1))
-        pcb.depth = float(pcb_size_match.group(2))
-
-    # 基板厚
-    pcb_thickness_match = re.search(r'基板厚.*?(\d+(?:\.\d+)?)\s*mm', content, re.IGNORECASE)
-    if pcb_thickness_match:
-        pcb.thickness = float(pcb_thickness_match.group(1))
-
-    # 筐体内寸
-    enc_size_match = re.search(r'内寸.*?(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)', content, re.IGNORECASE)
-    if enc_size_match:
-        enclosure.internal_width = float(enc_size_match.group(1))
-        enclosure.internal_depth = float(enc_size_match.group(2))
-        enclosure.internal_height = float(enc_size_match.group(3))
-
-    # ボス高さ
-    boss_height_match = re.search(r'ボス.*?高.*?(\d+(?:\.\d+)?)\s*mm', content, re.IGNORECASE)
-    if boss_height_match:
-        enclosure.boss_height = float(boss_height_match.group(1))
-
-    # 最大部品高さ
-    component_height_match = re.search(r'(?:最大)?部品高.*?(\d+(?:\.\d+)?)\s*mm', content, re.IGNORECASE)
-    if component_height_match:
-        pcb.max_component_height = float(component_height_match.group(1))
-
-    # 取付穴位置（テーブル形式をパース）
-    hole_pattern = re.compile(r'\((\d+(?:\.\d+)?),\s*(\d+(?:\.\d+)?)\)')
-    holes_section = re.search(r'取付穴.*?位置[：:]?\s*(.*?)(?:\n\n|\Z)', content, re.DOTALL | re.IGNORECASE)
-    if holes_section:
-        for match in hole_pattern.finditer(holes_section.group(1)):
-            pcb.mounting_holes.append((float(match.group(1)), float(match.group(2))))
-
-    # コネクタ情報
-    connector_pattern = re.compile(r'(USB-?[AC]|DC|RJ45|φ\d+(?:\.\d+)?)', re.IGNORECASE)
-    for match in connector_pattern.finditer(content):
-        pcb.connectors.append({"type": match.group(1)})
-
-    return pcb, enclosure
+def extract_section(content: str, title: str) -> str:
+    match = re.search(
+        rf"^###\s+{re.escape(title)}\s*$\n(.*?)(?=^###\s+|\Z)",
+        content,
+        re.MULTILINE | re.DOTALL | re.IGNORECASE,
+    )
+    return match.group(1) if match else ""
 
 
-def check_pcb_clearance(pcb: PCBSpec, enclosure: EnclosureSpec,
-                        min_clearance: float = 2.0) -> CheckResult:
-    """基板クリアランスチェック"""
-    width_clearance = (enclosure.internal_width - pcb.width) / 2
-    depth_clearance = (enclosure.internal_depth - pcb.depth) / 2
+def extract_row_value(content: str, label: str) -> Optional[str]:
+    match = re.search(
+        rf"^\|\s*{re.escape(label)}\s*\|\s*([^|\n]+)",
+        content,
+        re.MULTILINE | re.IGNORECASE,
+    )
+    if not match:
+        return None
+    value = match.group(1).strip()
+    if not value or "[" in value or re.search(r"\bW\b|\bD\b|\bH\b", value):
+        return None
+    return value
 
-    if width_clearance < 0 or depth_clearance < 0:
+
+def parse_scalar(value: Optional[str]) -> Optional[float]:
+    if not value:
+        return None
+    match = re.search(NUMBER, value)
+    return float(match.group(0)) if match else None
+
+
+def parse_dimensions(value: Optional[str], count: int) -> Tuple[Optional[float], ...]:
+    if not value:
+        return tuple([None] * count)
+    values = [float(item) for item in re.findall(NUMBER, value)]
+    if len(values) < count:
+        return tuple([None] * count)
+    return tuple(values[:count])
+
+
+def parse_points(value: Optional[str]) -> List[Tuple[float, float]]:
+    if not value:
+        return []
+    pattern = re.compile(rf"\(\s*({NUMBER})\s*,\s*({NUMBER})\s*\)")
+    return [(float(x), float(y)) for x, y in pattern.findall(value)]
+
+
+def parse_max_height_table(content: str) -> Optional[float]:
+    section = extract_section(content, "部品高さ")
+    if not section:
+        return None
+    heights = [
+        float(value)
+        for value in re.findall(
+            rf"^\|[^|]+\|\s*({NUMBER})\s*mm\s*\|",
+            section,
+            re.MULTILINE | re.IGNORECASE,
+        )
+    ]
+    return max(heights) if heights else None
+
+
+def parse_connectors(content: str) -> List[str]:
+    connector_section = extract_section(content, "コネクタ・開口部")
+    if not connector_section:
+        connector_section = extract_section(content, "Connectors, controls, and openings")
+    names: List[str] = []
+    for line in connector_section.splitlines():
+        if not line.startswith("|") or re.match(r"^\|\s*(?:---|ID\b|コネクタ\b)", line, re.IGNORECASE):
+            continue
+        cells = [cell.strip() for cell in line.strip("|").split("|")]
+        if cells and cells[0]:
+            names.append(cells[0])
+    return names
+
+
+def parse_spec_file(spec_path: Path) -> Tuple[PCBSpec, EnclosureSpec, AcceptanceCriteria]:
+    content = spec_path.read_text(encoding="utf-8")
+    pcb_section = extract_section(content, "基板仕様") or content
+    enclosure_section = extract_section(content, "筐体仕様") or content
+    criteria_section = extract_section(content, "Acceptance thresholds") or content
+
+    pcb_width, pcb_depth = parse_dimensions(extract_row_value(pcb_section, "基板サイズ"), 2)
+    enc_width, enc_depth, enc_height = parse_dimensions(extract_row_value(enclosure_section, "内寸"), 3)
+
+    max_component_height = parse_scalar(extract_row_value(pcb_section, "最大部品高"))
+    if max_component_height is None:
+        max_component_height = parse_max_height_table(content)
+
+    pcb = PCBSpec(
+        width=pcb_width,
+        depth=pcb_depth,
+        thickness=parse_scalar(extract_row_value(pcb_section, "基板厚")),
+        mounting_holes=parse_points(extract_row_value(pcb_section, "取付穴位置")),
+        max_component_height=max_component_height,
+        bottom_component_height=parse_scalar(extract_row_value(pcb_section, "下面最大部品高")),
+        connectors=parse_connectors(content),
+    )
+    enclosure = EnclosureSpec(
+        internal_width=enc_width,
+        internal_depth=enc_depth,
+        internal_height=enc_height,
+        boss_positions=parse_points(extract_row_value(enclosure_section, "ボス位置")),
+        boss_height=parse_scalar(extract_row_value(enclosure_section, "ボス高さ")),
+    )
+    criteria = AcceptanceCriteria(
+        xy_clearance=parse_scalar(extract_row_value(criteria_section, "基板外周最小クリアランス")),
+        top_clearance=parse_scalar(extract_row_value(criteria_section, "上面最小クリアランス")),
+        bottom_clearance=parse_scalar(extract_row_value(criteria_section, "下面最小クリアランス")),
+        mounting_tolerance=parse_scalar(extract_row_value(criteria_section, "取付位置許容差")),
+    )
+    return pcb, enclosure, criteria
+
+
+def check_required_inputs(pcb: PCBSpec, enclosure: EnclosureSpec) -> CheckResult:
+    critical = {
+        "基板幅": pcb.width,
+        "基板奥行": pcb.depth,
+        "筐体内幅": enclosure.internal_width,
+        "筐体内奥行": enclosure.internal_depth,
+        "筐体内高": enclosure.internal_height,
+    }
+    supporting = {
+        "基板厚": pcb.thickness,
+        "ボス高さ": enclosure.boss_height,
+        "最大部品高": pcb.max_component_height,
+    }
+    missing_critical = [name for name, value in critical.items() if value is None]
+    missing_supporting = [name for name, value in supporting.items() if value is None]
+    if missing_critical:
         return CheckResult(
-            name="基板クリアランス",
-            status="ERROR",
-            message=f"基板が筐体に収まりません",
-            details={
-                "pcb_size": f"{pcb.width} x {pcb.depth} mm",
-                "internal_size": f"{enclosure.internal_width} x {enclosure.internal_depth} mm",
-                "width_clearance": width_clearance,
-                "depth_clearance": depth_clearance
-            }
+            "入力完全性",
+            "ERROR",
+            "必須寸法が不足しているため完全な適合判定はできません",
+            {"missing_critical": missing_critical, "missing_supporting": missing_supporting},
+        )
+    if missing_supporting:
+        return CheckResult(
+            "入力完全性",
+            "CONDITIONAL",
+            "外形は評価できますが、高さまたは取付の評価データが不足しています",
+            {"missing_supporting": missing_supporting},
+        )
+    return CheckResult("入力完全性", "PASS", "主要な数値入力を取得しました")
+
+
+def check_pcb_clearance(
+    pcb: PCBSpec, enclosure: EnclosureSpec, required: Optional[float]
+) -> CheckResult:
+    if None in (pcb.width, pcb.depth, enclosure.internal_width, enclosure.internal_depth):
+        return CheckResult("基板外周クリアランス", "NOT_EVALUATED", "外形寸法が不足しています")
+
+    width_gap = (enclosure.internal_width - pcb.width) / 2
+    depth_gap = (enclosure.internal_depth - pcb.depth) / 2
+    minimum_gap = min(width_gap, depth_gap)
+    details = {"width_gap_mm": width_gap, "depth_gap_mm": depth_gap, "required_mm": required}
+
+    if minimum_gap < 0:
+        return CheckResult("基板外周クリアランス", "FAIL", "公称外形で基板が筐体に収まりません", details)
+    if required is None:
+        return CheckResult(
+            "基板外周クリアランス",
+            "CONDITIONAL",
+            "公称外形では収まりますが、必要最小クリアランスが未定義です",
+            details,
+        )
+    if minimum_gap < required:
+        return CheckResult("基板外周クリアランス", "FAIL", "必要最小クリアランスを満たしません", details)
+    return CheckResult("基板外周クリアランス", "PASS", "公称外形で必要最小クリアランスを満たします", details)
+
+
+def check_height_clearance(
+    pcb: PCBSpec, enclosure: EnclosureSpec, required: Optional[float]
+) -> CheckResult:
+    values = (pcb.thickness, pcb.max_component_height, enclosure.boss_height, enclosure.internal_height)
+    if any(value is None for value in values):
+        return CheckResult(
+            "上面クリアランス",
+            "NOT_EVALUATED",
+            "基板厚、最大部品高、ボス高、または筐体内高が不足しています",
         )
 
-    if width_clearance < min_clearance or depth_clearance < min_clearance:
+    gap = enclosure.internal_height - (
+        enclosure.boss_height + pcb.thickness + pcb.max_component_height
+    )
+    details = {
+        "top_gap_mm": gap,
+        "required_mm": required,
+        "boss_height_mm": enclosure.boss_height,
+        "pcb_thickness_mm": pcb.thickness,
+        "max_component_height_mm": pcb.max_component_height,
+    }
+    if gap < 0:
+        return CheckResult("上面クリアランス", "FAIL", "公称寸法で上面部品が筐体と干渉します", details)
+    if required is None:
         return CheckResult(
-            name="基板クリアランス",
-            status="WARNING",
-            message=f"クリアランスが推奨値({min_clearance}mm)未満です",
-            details={
-                "width_clearance": width_clearance,
-                "depth_clearance": depth_clearance,
-                "min_recommended": min_clearance
-            }
+            "上面クリアランス",
+            "CONDITIONAL",
+            "公称寸法では干渉しませんが、必要最小クリアランスが未定義です",
+            details,
+        )
+    if gap < required:
+        return CheckResult("上面クリアランス", "FAIL", "必要最小上面クリアランスを満たしません", details)
+    return CheckResult("上面クリアランス", "PASS", "公称寸法で必要最小上面クリアランスを満たします", details)
+
+
+def check_mounting_holes(
+    pcb: PCBSpec, enclosure: EnclosureSpec, tolerance: Optional[float]
+) -> CheckResult:
+    if not pcb.mounting_holes or not enclosure.boss_positions:
+        return CheckResult(
+            "取付位置",
+            "NOT_EVALUATED",
+            "基板取付穴または筐体ボスの座標が不足しています",
+            {"pcb_holes": pcb.mounting_holes, "bosses": enclosure.boss_positions},
+        )
+    if len(pcb.mounting_holes) != len(enclosure.boss_positions):
+        return CheckResult(
+            "取付位置",
+            "FAIL",
+            "基板取付穴と筐体ボスの個数が一致しません",
+            {"pcb_hole_count": len(pcb.mounting_holes), "boss_count": len(enclosure.boss_positions)},
         )
 
+    unmatched = list(enclosure.boss_positions)
+    offsets: List[float] = []
+    for hole in pcb.mounting_holes:
+        nearest = min(unmatched, key=lambda boss: ((hole[0] - boss[0]) ** 2 + (hole[1] - boss[1]) ** 2) ** 0.5)
+        offset = ((hole[0] - nearest[0]) ** 2 + (hole[1] - nearest[1]) ** 2) ** 0.5
+        offsets.append(offset)
+        unmatched.remove(nearest)
+
+    max_offset = max(offsets)
+    details = {"offsets_mm": offsets, "max_offset_mm": max_offset, "tolerance_mm": tolerance}
+    if tolerance is None:
+        return CheckResult(
+            "取付位置",
+            "CONDITIONAL",
+            "最近傍の公称位置差を算出しましたが、許容差が未定義です",
+            details,
+        )
+    if max_offset > tolerance:
+        return CheckResult("取付位置", "FAIL", "公称位置差が取付位置許容差を超えます", details)
+    details["assumption"] = "both coordinate lists are already transformed into the same frame"
     return CheckResult(
-        name="基板クリアランス",
-        status="OK",
-        message=f"クリアランス: 幅{width_clearance:.1f}mm, 奥行{depth_clearance:.1f}mm",
-        details={
-            "width_clearance": width_clearance,
-            "depth_clearance": depth_clearance
-        }
+        "取付位置",
+        "CONDITIONAL",
+        "同一座標frameへ変換済みと仮定すれば、公称位置差は許容差以内です",
+        details,
     )
 
 
-def check_height_clearance(pcb: PCBSpec, enclosure: EnclosureSpec,
-                           min_clearance: float = 2.0) -> CheckResult:
-    """高さクリアランスチェック"""
-    required_height = enclosure.boss_height + pcb.thickness + pcb.max_component_height + min_clearance
-    available_height = enclosure.internal_height
-
-    clearance = available_height - (enclosure.boss_height + pcb.thickness + pcb.max_component_height)
-
-    if clearance < 0:
-        return CheckResult(
-            name="高さクリアランス",
-            status="ERROR",
-            message=f"部品が筐体に干渉します",
-            details={
-                "required_height": required_height,
-                "available_height": available_height,
-                "clearance": clearance,
-                "boss_height": enclosure.boss_height,
-                "pcb_thickness": pcb.thickness,
-                "max_component_height": pcb.max_component_height
-            }
-        )
-
-    if clearance < min_clearance:
-        return CheckResult(
-            name="高さクリアランス",
-            status="WARNING",
-            message=f"高さクリアランスが推奨値({min_clearance}mm)未満です",
-            details={
-                "clearance": clearance,
-                "min_recommended": min_clearance
-            }
-        )
-
+def check_connector_scope(pcb: PCBSpec) -> CheckResult:
     return CheckResult(
-        name="高さクリアランス",
-        status="OK",
-        message=f"高さクリアランス: {clearance:.1f}mm",
-        details={
-            "clearance": clearance,
-            "breakdown": {
-                "boss_height": enclosure.boss_height,
-                "pcb_thickness": pcb.thickness,
-                "max_component_height": pcb.max_component_height,
-                "internal_height": available_height
-            }
-        }
+        "コネクタ・開口・挿抜",
+        "NOT_EVALUATED",
+        "このtext checkerは3D開口、plug、latch、工具、ケーブルのエンベロープを評価しません",
+        {"declared_rows": pcb.connectors},
     )
 
 
-def check_mounting_holes(pcb: PCBSpec, enclosure: EnclosureSpec,
-                        tolerance: float = 0.5) -> CheckResult:
-    """取付穴位置チェック"""
-    if not pcb.mounting_holes:
-        return CheckResult(
-            name="取付穴",
-            status="WARNING",
-            message="基板の取付穴位置が指定されていません",
-            details={}
-        )
-
-    if not enclosure.boss_positions:
-        return CheckResult(
-            name="取付穴",
-            status="WARNING",
-            message="筐体のボス位置が指定されていません",
-            details={}
-        )
-
-    # 位置の照合
-    mismatched = []
-    for i, pcb_hole in enumerate(pcb.mounting_holes):
-        matched = False
-        for boss in enclosure.boss_positions:
-            distance = ((pcb_hole[0] - boss[0])**2 + (pcb_hole[1] - boss[1])**2)**0.5
-            if distance <= tolerance:
-                matched = True
-                break
-        if not matched:
-            mismatched.append(pcb_hole)
-
-    if mismatched:
-        return CheckResult(
-            name="取付穴",
-            status="ERROR",
-            message=f"{len(mismatched)}箇所の取付穴が一致しません",
-            details={
-                "mismatched_holes": mismatched,
-                "tolerance": tolerance
-            }
-        )
-
-    return CheckResult(
-        name="取付穴",
-        status="OK",
-        message=f"全{len(pcb.mounting_holes)}箇所の取付穴が一致",
-        details={
-            "hole_count": len(pcb.mounting_holes),
-            "tolerance": tolerance
-        }
-    )
+def overall_status(results: List[CheckResult]) -> str:
+    statuses = {result.status for result in results}
+    if "ERROR" in statuses or "FAIL" in statuses:
+        return "FAIL"
+    if statuses & {"CONDITIONAL", "NOT_EVALUATED"}:
+        return "CONDITIONAL"
+    return "PASS"
 
 
-def generate_report(spec_path: Path, pcb: PCBSpec, enclosure: EnclosureSpec,
-                   results: List[CheckResult], output_path: Path) -> str:
-    """レポートを生成"""
-    report_lines = [
-        "# 統合設計 整合性チェックレポート",
+def generate_report(
+    spec_path: Path,
+    pcb: PCBSpec,
+    enclosure: EnclosureSpec,
+    criteria: AcceptanceCriteria,
+    results: List[CheckResult],
+    output_path: Path,
+) -> str:
+    lines = [
+        "# 統合設計スクリーニングレポート",
         "",
-        f"**仕様書**: {spec_path.name}",
-        f"**生成日時**: {__import__('datetime').datetime.now().isoformat()}",
+        f"- 仕様書: `{spec_path}`",
+        "- 範囲: Markdownから抽出した公称寸法のscreening。3D干渉、最悪公差、熱、EMC、IP試験は含まない。",
+        f"- 総合判定: **{overall_status(results)}**",
         "",
-        "---",
+        "## Parsed inputs",
         "",
-        "## 仕様サマリー",
+        "```json",
+        json.dumps(
+            {"pcb": asdict(pcb), "enclosure": asdict(enclosure), "criteria": asdict(criteria)},
+            indent=2,
+            ensure_ascii=False,
+        ),
+        "```",
         "",
-        "### 基板仕様",
-        f"- 外形: {pcb.width} x {pcb.depth} mm",
-        f"- 厚さ: {pcb.thickness} mm",
-        f"- 最大部品高: {pcb.max_component_height} mm",
-        f"- 取付穴: {len(pcb.mounting_holes)}箇所",
-        "",
-        "### 筐体仕様",
-        f"- 内寸: {enclosure.internal_width} x {enclosure.internal_depth} x {enclosure.internal_height} mm",
-        f"- 肉厚: {enclosure.wall_thickness} mm",
-        f"- ボス高さ: {enclosure.boss_height} mm",
-        "",
-        "---",
-        "",
-        "## チェック結果",
+        "## Checks",
         "",
     ]
-
-    # 結果サマリー
-    ok_count = sum(1 for r in results if r.status == "OK")
-    warning_count = sum(1 for r in results if r.status == "WARNING")
-    error_count = sum(1 for r in results if r.status == "ERROR")
-
-    if error_count > 0:
-        overall = "**不合格**"
-    elif warning_count > 0:
-        overall = "**条件付き合格（要確認）**"
-    else:
-        overall = "**合格**"
-
-    report_lines.extend([
-        f"### 総合判定: {overall}",
-        "",
-        f"- OK: {ok_count}",
-        f"- WARNING: {warning_count}",
-        f"- ERROR: {error_count}",
-        "",
-    ])
-
-    # 詳細結果
-    report_lines.append("### 詳細")
-    report_lines.append("")
-
-    status_emoji = {"OK": "[OK]", "WARNING": "[WARN]", "ERROR": "[NG]"}
-
     for result in results:
-        emoji = status_emoji.get(result.status, "")
-        report_lines.append(f"#### {emoji} {result.name}")
-        report_lines.append("")
-        report_lines.append(f"**結果**: {result.status}")
-        report_lines.append(f"**メッセージ**: {result.message}")
-        report_lines.append("")
-
-        if result.details:
-            report_lines.append("**詳細**:")
-            for key, value in result.details.items():
-                report_lines.append(f"- {key}: {value}")
-            report_lines.append("")
-
-    report_content = "\n".join(report_lines)
-
-    # ファイル出力
-    output_path.write_text(report_content, encoding='utf-8')
-
+        lines.extend(
+            [
+                f"### {result.status}: {result.name}",
+                "",
+                result.message,
+                "",
+                "```json",
+                json.dumps(result.details, indent=2, ensure_ascii=False),
+                "```",
+                "",
+            ]
+        )
+    output_path.write_text("\n".join(lines), encoding="utf-8")
     return str(output_path)
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description='基板-筐体の整合性チェック'
+def main() -> None:
+    parser = argparse.ArgumentParser(description="統合仕様書の公称寸法をscreeningする")
+    parser.add_argument("spec", type=Path, help="統合仕様書（.md）")
+    parser.add_argument("-o", "--output", type=Path, default=Path("outputs"))
+    parser.add_argument("--name", type=str, default=None)
+    parser.add_argument(
+        "--clearance",
+        type=float,
+        default=None,
+        help="基板外周の必要最小clearance [mm]。未指定時は仕様書の値を使用",
     )
-    parser.add_argument('spec', type=Path, help='統合仕様書（.md）')
-    parser.add_argument('-o', '--output', type=Path, default=Path('outputs'),
-                        help='出力ディレクトリ（デフォルト: outputs/）')
-    parser.add_argument('--name', type=str, default=None,
-                        help='出力ファイル名（デフォルト: スペック名）')
-    parser.add_argument('--clearance', type=float, default=2.0,
-                        help='推奨クリアランス（デフォルト: 2.0mm）')
-    parser.add_argument('--tolerance', type=float, default=0.5,
-                        help='位置公差（デフォルト: 0.5mm）')
-    parser.add_argument('--json', action='store_true',
-                        help='結果をJSON形式で出力')
-
+    parser.add_argument(
+        "--z-clearance",
+        type=float,
+        default=None,
+        help="上面の必要最小clearance [mm]。未指定時は仕様書の値を使用",
+    )
+    parser.add_argument(
+        "--tolerance",
+        type=float,
+        default=None,
+        help="取付位置許容差 [mm]。未指定時は仕様書の値を使用",
+    )
+    parser.add_argument("--json", action="store_true")
+    parser.add_argument("--fail-on-fail", action="store_true", help="FAIL判定時に終了コード2を返す")
     args = parser.parse_args()
 
-    # 仕様書確認
     if not args.spec.exists():
         print(f"Error: Spec file not found: {args.spec}", file=sys.stderr)
         sys.exit(1)
 
-    # 基本名
-    base_name = args.name or args.spec.stem.replace('-spec', '')
-
-    # 出力ディレクトリ作成
     args.output.mkdir(parents=True, exist_ok=True)
-
-    result_data = {
-        "spec": str(args.spec),
-        "output_dir": str(args.output),
-        "checks": [],
-        "overall_status": "OK",
-        "exported_files": [],
-        "errors": []
-    }
+    base_name = args.name or args.spec.stem.replace("-spec", "")
 
     try:
-        # 仕様書パース
-        print(f"Parsing spec: {args.spec}")
-        pcb, enclosure = parse_spec_file(args.spec)
+        pcb, enclosure, criteria = parse_spec_file(args.spec)
+        if args.clearance is not None:
+            criteria.xy_clearance = args.clearance
+        if args.z_clearance is not None:
+            criteria.top_clearance = args.z_clearance
+        if args.tolerance is not None:
+            criteria.mounting_tolerance = args.tolerance
 
-        print(f"PCB: {pcb.width} x {pcb.depth} mm")
-        print(f"Enclosure internal: {enclosure.internal_width} x {enclosure.internal_depth} x {enclosure.internal_height} mm")
-
-        # チェック実行
-        print("\nRunning checks...")
-        results = []
-
-        # 基板クリアランス
-        results.append(check_pcb_clearance(pcb, enclosure, args.clearance))
-
-        # 高さクリアランス
-        results.append(check_height_clearance(pcb, enclosure, args.clearance))
-
-        # 取付穴
-        results.append(check_mounting_holes(pcb, enclosure, args.tolerance))
-
-        # 結果表示
-        for result in results:
-            status_str = f"[{result.status}]"
-            print(f"  {status_str:8} {result.name}: {result.message}")
-            result_data["checks"].append({
-                "name": result.name,
-                "status": result.status,
-                "message": result.message,
-                "details": result.details
-            })
-
-        # 総合判定
-        if any(r.status == "ERROR" for r in results):
-            result_data["overall_status"] = "ERROR"
-        elif any(r.status == "WARNING" for r in results):
-            result_data["overall_status"] = "WARNING"
-
-        # レポート生成
-        print("\nGenerating report...")
+        results = [
+            check_required_inputs(pcb, enclosure),
+            check_pcb_clearance(pcb, enclosure, criteria.xy_clearance),
+            check_height_clearance(pcb, enclosure, criteria.top_clearance),
+            check_mounting_holes(pcb, enclosure, criteria.mounting_tolerance),
+            check_connector_scope(pcb),
+        ]
+        status = overall_status(results)
         report_path = args.output / f"{base_name}-integration-report.md"
-        generate_report(args.spec, pcb, enclosure, results, report_path)
-        result_data["exported_files"].append(str(report_path))
-        print(f"  Created: {report_path}")
+        generate_report(args.spec, pcb, enclosure, criteria, results, report_path)
 
-        print(f"\nOverall: {result_data['overall_status']}")
+        result_data = {
+            "spec": str(args.spec),
+            "output_dir": str(args.output),
+            "parsed": {
+                "pcb": asdict(pcb),
+                "enclosure": asdict(enclosure),
+                "criteria": asdict(criteria),
+            },
+            "checks": [asdict(result) for result in results],
+            "overall_status": status,
+            "exported_files": [str(report_path)],
+            "errors": [],
+        }
 
-    except Exception as e:
-        result_data["errors"].append(str(e))
-        print(f"Error: {e}", file=sys.stderr)
-        import traceback
-        traceback.print_exc()
+        for result in results:
+            print(f"[{result.status}] {result.name}: {result.message}")
+        print(f"Report: {report_path}")
+        print(f"Overall: {status}")
+        if args.json:
+            print(json.dumps(result_data, indent=2, ensure_ascii=False))
+        if args.fail_on_fail and status == "FAIL":
+            sys.exit(2)
+    except Exception as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        if args.json:
+            print(json.dumps({"errors": [str(exc)]}, ensure_ascii=False))
         sys.exit(1)
-
-    # JSON出力
-    if args.json:
-        print(json.dumps(result_data, indent=2, ensure_ascii=False))
 
 
 if __name__ == "__main__":

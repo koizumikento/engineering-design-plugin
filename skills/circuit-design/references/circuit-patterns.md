@@ -1,464 +1,115 @@
-# 回路パターン集
+# 回路パターン設計チェック
 
-## 概要
+## 目次
 
-よく使う回路パターンのSKiDL実装例です。
+共通レビュー / Divider / LED / RC / Op-amp / Regulator / Digital bus / Protection / SKiDL representation
 
----
+この文書は特定部品の推奨回路を代替しない。値、pinout、安定条件、保護、layoutは採用MPNの最新版datasheetとapplication noteを優先する。
 
-## 1. 電源回路
+## 共通レビュー
 
-### 3端子レギュレータ（7805）
+- operating、startup、shutdown、fault、unpowered states
+- min/nom/max source and load conditions
+- absolute maximumとrecommended operating conditionsの両方
+- tolerance、temperature、aging、bias dependence
+- power dissipation、junction temperature、SOA
+- source/load impedanceとbandwidth/noise
+- external connector、ESD/EFT/surge exposure
+- decouplingとreturn path、layout-sensitive loop
+- test pointと測定負荷
+- exact symbol pinout、footprint、MPN、model provenance
 
-```python
-from skidl import *
+## Divider and bias network
 
-vcc_in = Net('VCC_IN')    # 入力（7〜25V）
-vcc_out = Net('VCC_5V')   # 出力（5V）
-gnd = Net('GND')
+理想無負荷:
 
-# 7805
-reg = Part("Regulator_Linear", 'L7805', footprint='Package_TO_SOT_THT:TO-220-3_Vertical')
-
-# 入力コンデンサ
-c_in = Part("Device", 'CP', value='100u', footprint='Capacitor_THT:CP_Radial_D8.0mm_P3.50mm')
-
-# 出力コンデンサ
-c_out = Part("Device", 'C', value='100n', footprint='Capacitor_SMD:C_0603_1608Metric')
-
-# 接続
-vcc_in & c_in['+'] & reg['VI']
-c_in['-'] += gnd
-reg['GND'] += gnd
-reg['VO'] & c_out & gnd
-vcc_out += reg['VO']
-
-ERC()
+```text
+Vout = Vin * R2 / (R1 + R2)
+Rth = R1 || R2
 ```
 
-### LDO（AMS1117-3.3）
+後段負荷、input leakage、ADC sampling capacitor、source impedance、resistor tolerance、self-heating、power-up状態を含める。電力供給やlogic level translationへ分圧器を無条件に使わない。
 
-```python
-from skidl import *
+## LED resistor
 
-vcc_in = Net('VCC_IN')    # 入力（4.5〜12V）
-vcc_out = Net('VCC_3V3')  # 出力（3.3V）
-gnd = Net('GND')
-
-# AMS1117-3.3
-ldo = Part("Regulator_Linear", 'AMS1117-3.3', footprint='Package_TO_SOT_SMD:SOT-223-3_TabPin2')
-
-# コンデンサ
-c_in = Part("Device", 'C', value='10u', footprint='Capacitor_SMD:C_0805_2012Metric')
-c_out = Part("Device", 'C', value='10u', footprint='Capacitor_SMD:C_0805_2012Metric')
-
-# 接続
-vcc_in += ldo['VI'], c_in[1]
-c_in[2] += gnd
-ldo['GND'] += gnd
-ldo['VO'] += vcc_out, c_out[1]
-c_out[2] += gnd
-
-ERC()
+```text
+R = (Vsupply - Vf - Vswitch) / Iled
+P_R = Iled^2 * R
 ```
 
----
+Vfの温度/lot範囲、supply範囲、driver saturation、resistor tolerance、LED pulse/continuous ratingを最悪条件で確認する。抵抗値は希望電流より安全側へ丸め、実電流範囲を再計算する。
 
-## 2. LED駆動
+## RC filters
 
-### 単純LED駆動
+理想1次:
 
-```python
-from skidl import *
-
-def led_driver(vcc_net, gnd_net, vcc_voltage=5.0, led_vf=2.0, led_current=0.020):
-    """
-    LED駆動回路
-    R = (Vcc - Vf) / If
-    """
-    r_value = (vcc_voltage - led_vf) / led_current
-    # E24系列に丸める
-    e24_values = [10, 11, 12, 13, 15, 16, 18, 20, 22, 24, 27, 30,
-                  33, 36, 39, 43, 47, 51, 56, 62, 68, 75, 82, 91]
-
-    # 近い値を選択
-    magnitude = 10 ** int(len(str(int(r_value))) - 2)
-    normalized = r_value / magnitude
-    closest = min(e24_values, key=lambda x: abs(x - normalized))
-    r_final = closest * magnitude
-
-    r_limit = Part("Device", 'R', value=f'{int(r_final)}')
-    led = Part("Device", 'LED')
-
-    vcc_net & r_limit & led & gnd_net
-
-    return r_limit, led
-
-# 使用例
-vcc = Net('VCC')
-gnd = Net('GND')
-r, led = led_driver(vcc, gnd, vcc_voltage=5.0, led_vf=2.0, led_current=0.020)
-# R = (5-2)/0.02 = 150Ω
+```text
+fc = 1 / (2*pi*R*C)
 ```
 
-### 定電流LED駆動（トランジスタ）
+source/load impedanceがRに並列/直列で加わる。capacitor tolerance、DC bias、ESR/ESL、input/output protection、settling timeを確認する。anti-alias filterはsamplingと必要attenuationから設計する。
 
-```python
-from skidl import *
+## Op-amp stage
 
-vcc = Net('VCC')
-gnd = Net('GND')
-ctrl = Net('CTRL')  # 制御信号
+非反転理想gain:
 
-# NPNトランジスタ
-q = Part("Device", 'Q_NPN_BCE', value='2SC1815')
-
-# 抵抗
-r_base = Part("Device", 'R', value='1K')   # ベース電流制限
-r_sense = Part("Device", 'R', value='10')  # 電流センス
-
-# LED
-led = Part("Device", 'LED')
-
-# 接続
-ctrl & r_base & q['B']
-vcc & led & q['C']
-q['E'] & r_sense & gnd
-
-ERC()
+```text
+Av = 1 + Rf/Rg
 ```
 
----
+反転理想gain:
 
-## 3. 信号処理
-
-### 分圧回路
-
-```python
-from skidl import *
-
-def voltage_divider(vin_net, vout_net, gnd_net, vin_voltage, vout_voltage, current=0.001):
-    """
-    分圧回路
-    Vout = Vin × R2 / (R1 + R2)
-    """
-    r_total = vin_voltage / current
-    r2 = r_total * (vout_voltage / vin_voltage)
-    r1 = r_total - r2
-
-    r1_part = Part("Device", 'R', value=f'{int(r1)}')
-    r2_part = Part("Device", 'R', value=f'{int(r2)}')
-
-    vin_net & r1_part & vout_net & r2_part & gnd_net
-
-    return r1_part, r2_part
-
-# 使用例：5V → 3.3V
-vin = Net('VIN')
-vout = Net('VOUT')
-gnd = Net('GND')
-r1, r2 = voltage_divider(vin, vout, gnd, 5.0, 3.3, current=0.001)
+```text
+Av = -Rf/Rin
 ```
 
-### RCローパスフィルタ
+必ず確認する項目:
 
-```python
-from skidl import *
+- input common-mode range
+- output swing versus load
+- supply/current and power-on behavior
+- gain bandwidth、slew rate、settling
+- input bias/offset/noise and resistor noise
+- capacitive load stability and phase margin
+- common-mode/overvoltage protection
+- unused amplifier treatment
+- local decoupling and layout guidance
 
-def rc_lowpass(input_net, output_net, gnd_net, cutoff_freq, r_value=10000):
-    """
-    1次RCローパスフィルタ
-    fc = 1 / (2π × R × C)
-    """
-    import math
-    c_value = 1 / (2 * math.pi * r_value * cutoff_freq)
+理想VCVS simulationだけで採用op-ampの安定性やrail behaviorを立証しない。
 
-    # pF/nF/uF表記に変換
-    if c_value >= 1e-6:
-        c_str = f'{c_value*1e6:.1f}u'
-    elif c_value >= 1e-9:
-        c_str = f'{c_value*1e9:.0f}n'
-    else:
-        c_str = f'{c_value*1e12:.0f}p'
+## Linear regulator
 
-    r = Part("Device", 'R', value=f'{int(r_value/1000)}K')
-    c = Part("Device", 'C', value=c_str)
+- input/output range and dropout across current/temperature
+- output capacitor value、ESR、bias derating、placement
+- quiescent current and reverse-current paths
+- power dissipation: `(Vin - Vout) * Iout`
+- thermal resistance、copper area、ambient
+- startup、current limit、short circuit、enable
+- input transient and reverse polarity
 
-    input_net & r & output_net & c & gnd_net
+特定regulatorの入出力capacitorや最大入力を一般化しない。
 
-    return r, c
+## Digital and open-drain buses
 
-# 使用例：1kHzカットオフ
-sig_in = Net('SIG_IN')
-sig_out = Net('SIG_OUT')
-gnd = Net('GND')
-r, c = rc_lowpass(sig_in, sig_out, gnd, cutoff_freq=1000)
-```
+pull-upは固定値から始めず、bus capacitance、required rise time、sink current、voltage、device leakageから範囲を決める。level translation topologyは方向、open-drain/push-pull、power-off behavior、speedを確認する。
 
-### RCハイパスフィルタ
+## Protection
 
-```python
-from skidl import *
+- threat waveform/standard and coupling point
+- maximum normal signal and clamp threshold
+- dynamic resistance, pulse energy, capacitance
+- series impedance and current path
+- return/ground inductance and placement
+- downstream device abs max
 
-def rc_highpass(input_net, output_net, gnd_net, cutoff_freq, c_value=100e-9):
-    """
-    1次RCハイパスフィルタ
-    fc = 1 / (2π × R × C)
-    """
-    import math
-    r_value = 1 / (2 * math.pi * c_value * cutoff_freq)
+TVSの型式名だけでESD/surge適合を主張しない。
 
-    c = Part("Device", 'C', value='100n')
-    r = Part("Device", 'R', value=f'{int(r_value/1000)}K')
+## SKiDL representation
 
-    input_net & c & output_net & r & gnd_net
+- external portsをconnector/test pointとして置く
+- railsとground domainを命名する
+- protection partsをboundary近くのlogical blockにまとめる
+- modelにないintentはcomment/design summaryへ残す
+- critical valuesにcalculation sourceとrequirement IDを付ける
 
-    return c, r
-
-# 使用例：100Hzカットオフ（DCカット）
-sig_in = Net('SIG_IN')
-sig_out = Net('SIG_OUT')
-gnd = Net('GND')
-c, r = rc_highpass(sig_in, sig_out, gnd, cutoff_freq=100)
-```
-
----
-
-## 4. オペアンプ回路
-
-### ボルテージフォロワ（バッファ）
-
-```python
-from skidl import *
-
-vcc = Net('VCC')
-vee = Net('VEE')  # または GND（単電源の場合）
-gnd = Net('GND')
-vin = Net('VIN')
-vout = Net('VOUT')
-
-opamp = Part("Amplifier_Operational", 'TL072')
-
-# 電源
-vcc += opamp['V+']
-vee += opamp['V-']
-
-# ボルテージフォロワ（ゲイン=1）
-vin += opamp['1+']
-opamp['1-'] += opamp['1OUT']  # 100%負帰還
-vout += opamp['1OUT']
-
-ERC()
-```
-
-### 非反転増幅回路
-
-```python
-from skidl import *
-
-def non_inverting_amp(vin_net, vout_net, vcc_net, vee_net, gain):
-    """
-    非反転増幅回路
-    Gain = 1 + Rf/Ri
-    Rf = (Gain - 1) × Ri
-    """
-    ri_value = 10000  # 10K固定
-    rf_value = (gain - 1) * ri_value
-
-    opamp = Part("Amplifier_Operational", 'TL072')
-    ri = Part("Device", 'R', value=f'{int(ri_value/1000)}K')
-    rf = Part("Device", 'R', value=f'{int(rf_value/1000)}K')
-
-    # 電源
-    vcc_net += opamp['V+']
-    vee_net += opamp['V-']
-
-    # 非反転増幅
-    vin_net += opamp['1+']
-
-    # 帰還回路
-    gnd = Net('GND')
-    gnd & ri & opamp['1-'] & rf & opamp['1OUT']
-    vout_net += opamp['1OUT']
-
-    return opamp, ri, rf
-
-# 使用例：ゲイン10倍
-vin = Net('VIN')
-vout = Net('VOUT')
-vcc = Net('VCC')
-vee = Net('VEE')
-op, ri, rf = non_inverting_amp(vin, vout, vcc, vee, gain=10)
-```
-
-### 反転増幅回路
-
-```python
-from skidl import *
-
-def inverting_amp(vin_net, vout_net, vcc_net, vee_net, gnd_net, gain):
-    """
-    反転増幅回路
-    Gain = -Rf/Ri
-    """
-    ri_value = 10000
-    rf_value = abs(gain) * ri_value
-
-    opamp = Part("Amplifier_Operational", 'TL072')
-    ri = Part("Device", 'R', value=f'{int(ri_value/1000)}K')
-    rf = Part("Device", 'R', value=f'{int(rf_value/1000)}K')
-
-    # 電源
-    vcc_net += opamp['V+']
-    vee_net += opamp['V-']
-
-    # 反転増幅
-    gnd_net += opamp['1+']
-    vin_net & ri & opamp['1-'] & rf & vout_net
-    vout_net += opamp['1OUT']
-
-    return opamp, ri, rf
-```
-
----
-
-## 5. センサー回路
-
-### 温度センサー（サーミスタ）
-
-```python
-from skidl import *
-
-vcc = Net('VCC')
-gnd = Net('GND')
-adc = Net('ADC')  # ADC入力へ
-
-# サーミスタ + 分圧
-thermistor = Part("Device", 'Thermistor_NTC', value='10K')
-r_ref = Part("Device", 'R', value='10K')
-
-# フィルタ用コンデンサ
-c_filter = Part("Device", 'C', value='100n')
-
-# 分圧回路
-vcc & r_ref & adc & thermistor & gnd
-
-# ADCフィルタ
-adc & c_filter & gnd
-
-ERC()
-```
-
-### 光センサー（CdS）
-
-```python
-from skidl import *
-
-vcc = Net('VCC')
-gnd = Net('GND')
-adc = Net('ADC')
-
-# CdS + 分圧抵抗
-cds = Part("Device", 'R_PHOTO', value='CdS')
-r_ref = Part("Device", 'R', value='10K')
-
-# 明るい時にADC値が高くなる接続
-vcc & r_ref & adc & cds & gnd
-
-ERC()
-```
-
----
-
-## 6. インターフェース回路
-
-### I2Cプルアップ
-
-```python
-from skidl import *
-
-vcc = Net('VCC')
-sda = Net('SDA')
-scl = Net('SCL')
-
-# プルアップ抵抗（3.3V系では2.2K〜4.7K）
-r_sda = Part("Device", 'R', value='4K7')
-r_scl = Part("Device", 'R', value='4K7')
-
-vcc & r_sda & sda
-vcc & r_scl & scl
-
-ERC()
-```
-
-### UARTレベル変換
-
-```python
-from skidl import *
-
-# 5V側
-vcc_5v = Net('VCC_5V')
-tx_5v = Net('TX_5V')
-rx_5v = Net('RX_5V')
-
-# 3.3V側
-vcc_3v3 = Net('VCC_3V3')
-tx_3v3 = Net('TX_3V3')
-rx_3v3 = Net('RX_3V3')
-
-gnd = Net('GND')
-
-# 分圧でTX 5V→3.3V
-r1 = Part("Device", 'R', value='1K')
-r2 = Part("Device", 'R', value='2K')
-tx_5v & r1 & rx_3v3 & r2 & gnd
-
-# MOSFETでRX 3.3V→5V（双方向可）
-q = Part("Device", 'Q_NMOS_GSD', value='2N7000')
-r_5v = Part("Device", 'R', value='10K')
-r_3v3 = Part("Device", 'R', value='10K')
-
-# MOSFET接続
-vcc_3v3 & r_3v3 & tx_3v3
-tx_3v3 += q['G']
-q['S'] += gnd
-vcc_5v & r_5v & rx_5v
-rx_5v += q['D']
-
-ERC()
-```
-
----
-
-## 7. 保護回路
-
-### 逆接続保護（ダイオード）
-
-```python
-from skidl import *
-
-vin = Net('VIN')
-vcc = Net('VCC')
-gnd = Net('GND')
-
-# ショットキーダイオード
-d_protect = Part("Device", 'D_Schottky', value='SS14')
-
-vin & d_protect & vcc
-# Vf約0.4Vの電圧降下あり
-```
-
-### ESD保護
-
-```python
-from skidl import *
-
-signal = Net('SIGNAL')
-gnd = Net('GND')
-
-# TVSダイオード
-tvs = Part("Device", 'D_TVS', value='SMBJ5.0A')
-
-signal += tvs[1]
-gnd += tvs[2]
-```
+回路例を追加する場合は、exact part、datasheet revision、operating conditions、calculation、ERC、必要simulation、known limitationsを同じ変更に含める。

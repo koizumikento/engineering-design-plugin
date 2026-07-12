@@ -1,370 +1,105 @@
-# SPICEシミュレーションガイド
+# SPICE simulation guide
 
-## 概要
+## 目次
 
-PySpiceを使用した回路シミュレーションのガイドです。
-SKiDLで設計した回路をSPICEでシミュレーションできます。
+Purpose / Model provenance / Analysis / Corners / Measurements / Runner / Convergence / Validation / Sources
 
----
+## Purpose
 
-## 1. 基本構造
+simulationは要求に結び付く問いへ答えるために行う。波形を生成すること自体を完了条件にしない。
 
-### PySpiceのインポート
-
-```python
-from PySpice.Spice.NgSpice.Shared import NgSpiceShared
-from PySpice.Probe.Plot import plot
-import PySpice.Logging.Logging as Logging
-
-# ログ設定
-logger = Logging.setup_logging()
-
-# シミュレータ
-from PySpice.Spice.Parser import SpiceParser
-from PySpice.Unit import *
+```markdown
+| Requirement | Scenario | Analysis | Measurement | Acceptance |
+|---|---|---|---|---|
+| CIR-PERF-001 | Vin min/nom/max, load max | OP/DC | Vout, device power | specified limits |
 ```
 
-### シンプルな回路定義
+## Model provenance
 
-```python
-from PySpice.Spice.Library import SpiceLibrary
-from PySpice.Spice.Netlist import Circuit
+各model/subcircuitについて記録する。
 
-# 回路作成
-circuit = Circuit('Simple RC Circuit')
+- manufacturer/source URL or controlled path
+- model name、revision/date、license
+- mapped MPN/package
+- subcircuit pin order versus symbol
+- supported simulator and syntax
+- modeled effects and known omissions
+- temperature/process applicability
 
-# 電源（DC 5V）
-circuit.V('input', 'vin', circuit.gnd, 5@u_V)
+generic/ideal modelはconcept検証に使えるが、採用部品の最悪性能を代表しない。
 
-# 抵抗
-circuit.R('1', 'vin', 'vout', 1@u_kOhm)
+## Analysis selection
 
-# コンデンサ
-circuit.C('1', 'vout', circuit.gnd, 100@u_nF)
+| Analysis | Question | Typical checks |
+|---|---|---|
+| OP | bias pointは成立するか | node voltage、branch current、device power |
+| DC sweep | input/load variationへの静的応答 | transfer、headroom、limit |
+| AC | linearized small-signal response | gain、phase、bandwidth、impedance |
+| Transient | startup、pulse、settling | overshoot、rise/fall、settling、energy |
+| Noise | specified bandのnoise | input/output referred noise |
+| Temperature/parameter sweep | corner sensitivity | min/max margin |
+
+AC analysisはoperating point周りのlinearized analysisである。large-signal slew、clipping、startupはtransientで確認する。
+
+## Corners and tolerances
+
+- supply min/nom/max
+- source/load min/max
+- component tolerance and bias derating
+- temperature
+- semiconductor model/process corner when provided
+- startup initial conditions
+- plausible fault and unpowered states
+
+nominal 1 caseだけのpassをworst-case passと表現しない。
+
+## Measurements
+
+画像だけでなくCSVまたは数値summaryを保存する。
+
+- extrema and margin to limits
+- crossing frequency、gain/phase at specified points
+- settling time with defined band
+- RMS/integrated noise over defined bandwidth
+- peak/RMS current and power
+- simulation command、step、tolerances、model set
+
+## Repository runner
+
+```bash
+uv run python skills/circuit-design/scripts/pyspice_sim.py input.py -o outputs/ --dc
+uv run python skills/circuit-design/scripts/pyspice_sim.py input.py -o outputs/ --ac
+uv run python skills/circuit-design/scripts/pyspice_sim.py input.py -o outputs/ --tran
 ```
 
----
+runnerが対象script/modelを解釈できるかを先に確認する。unsupported circuitを空またはidealized resultでpassさせない。
 
-## 2. 部品の定義
+projectはPySpice 1.5以上を宣言している。PySpice 1.6 docsのAPIを使う場合はlock更新と回帰確認を行う。
 
-### 受動部品
+## Convergence
 
-```python
-# 抵抗
-circuit.R('name', 'node1', 'node2', value@u_Ohm)
-circuit.R('1', 'in', 'out', 10@u_kOhm)
+収束エラーは設計不良、浮遊node、model discontinuity、極端な時定数、初期条件、数値設定など複数原因を持つ。
 
-# コンデンサ
-circuit.C('name', 'node1', 'node2', value@u_F)
-circuit.C('1', 'out', circuit.gnd, 100@u_nF)
+1. netlist、ground、source、pin orderを確認する。
+2. OPを単独で解き、浮遊nodeや不定状態を探す。
+3. ideal switch/sourceを有限rise time/impedanceへ近づける。
+4. modelの推奨optionを確認する。
+5. time stepやsolver optionを変更した場合、結果感度を比較して記録する。
 
-# インダクタ
-circuit.L('name', 'node1', 'node2', value@u_H)
-circuit.L('1', 'in', 'out', 1@u_mH)
-```
+`timestep too small` に対して単純にstepを大きくするだけでは、重要transientを失う可能性がある。数値変更で物理結果が変わっていないか確認する。
 
-### 電源
+## Validation
 
-```python
-# DC電圧源
-circuit.V('dc', 'vcc', circuit.gnd, 5@u_V)
+- hand calculation or datasheet curveとのsanity check
+- expected limiting case（Rのみ、C open/shortなど）
+- model pin mappingのsmall fixture test
+- another simulator/measurementとのcross-check for critical claims
+- convergence option sensitivity
+- hardware test planへのhandoff
 
-# AC電圧源
-circuit.SinusoidalVoltageSource('ac', 'vin', circuit.gnd,
-    amplitude=1@u_V, frequency=1@u_kHz)
+## Official sources
 
-# パルス電圧源
-circuit.PulseVoltageSource('pulse', 'vin', circuit.gnd,
-    initial_value=0@u_V, pulsed_value=5@u_V,
-    delay_time=0@u_us, rise_time=1@u_us, fall_time=1@u_us,
-    pulse_width=500@u_us, period=1@u_ms)
-
-# PWL（区分線形）電圧源
-circuit.PieceWiseLinearVoltageSource('pwl', 'vin', circuit.gnd,
-    values=[(0, 0), (1@u_ms, 5), (2@u_ms, 0)])
-```
-
-### 半導体
-
-```python
-# ダイオード
-circuit.D('1', 'anode', 'cathode', model='1N4148')
-
-# ダイオードモデル定義
-circuit.model('1N4148', 'D', Is=2.52e-9, Rs=0.568, N=1.752)
-
-# NPNトランジスタ
-circuit.BJT('1', 'collector', 'base', 'emitter', model='2N2222')
-circuit.model('2N2222', 'NPN', Is=14.34e-15, Bf=255.9)
-
-# MOSFET
-circuit.MOSFET('1', 'drain', 'gate', 'source', circuit.gnd, model='IRF540')
-```
-
-### オペアンプ
-
-```python
-# 理想オペアンプ（VCVSで代用）
-# E(name, n+, n-, control+, control-, gain)
-circuit.VoltageControlledVoltageSource('opamp', 'out', circuit.gnd,
-    'in_plus', 'in_minus', voltage_gain=1e6)
-
-# サブサーキットを使用
-circuit.include('/path/to/opamp.lib')
-circuit.X('1', 'TL072', 'in_plus', 'in_minus', 'vcc', 'vee', 'out')
-```
-
----
-
-## 3. 解析の種類
-
-### DC動作点解析
-
-```python
-from PySpice.Spice.Netlist import Circuit
-
-circuit = Circuit('DC Analysis')
-circuit.V('input', 'vin', circuit.gnd, 5@u_V)
-circuit.R('1', 'vin', 'vout', 10@u_kOhm)
-circuit.R('2', 'vout', circuit.gnd, 10@u_kOhm)
-
-# シミュレータ作成
-simulator = circuit.simulator(temperature=25, nominal_temperature=25)
-
-# 動作点解析
-analysis = simulator.operating_point()
-
-# 結果取得
-print(f"Vout = {float(analysis['vout']):.3f} V")
-```
-
-### DCスイープ
-
-```python
-# Vinputを0Vから10Vまでスイープ
-analysis = simulator.dc(Vinput=slice(0, 10, 0.1))
-
-# 結果プロット
-import matplotlib.pyplot as plt
-plt.plot(analysis['vinput'], analysis['vout'])
-plt.xlabel('Vin (V)')
-plt.ylabel('Vout (V)')
-plt.grid(True)
-plt.savefig('dc_sweep.png')
-```
-
-### AC解析（周波数特性）
-
-```python
-from PySpice.Unit import *
-
-circuit = Circuit('AC Analysis')
-
-# AC電圧源
-circuit.SinusoidalVoltageSource('input', 'vin', circuit.gnd, amplitude=1@u_V)
-
-# RCフィルタ
-circuit.R('1', 'vin', 'vout', 1@u_kOhm)
-circuit.C('1', 'vout', circuit.gnd, 100@u_nF)
-
-simulator = circuit.simulator()
-
-# AC解析：10Hz〜1MHz、decade当たり10ポイント
-analysis = simulator.ac(start_frequency=10@u_Hz, stop_frequency=1@u_MHz,
-                        number_of_points=10, variation='dec')
-
-# ボード線図
-import numpy as np
-import matplotlib.pyplot as plt
-
-frequency = np.array(analysis.frequency)
-vout = np.array(analysis['vout'])
-
-# ゲイン（dB）
-gain_db = 20 * np.log10(np.abs(vout))
-
-# 位相（度）
-phase_deg = np.angle(vout, deg=True)
-
-fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True, figsize=(10, 8))
-
-ax1.semilogx(frequency, gain_db)
-ax1.set_ylabel('Gain (dB)')
-ax1.grid(True)
-
-ax2.semilogx(frequency, phase_deg)
-ax2.set_xlabel('Frequency (Hz)')
-ax2.set_ylabel('Phase (deg)')
-ax2.grid(True)
-
-plt.savefig('bode_plot.png')
-```
-
-### 過渡解析
-
-```python
-from PySpice.Unit import *
-
-circuit = Circuit('Transient Analysis')
-
-# パルス入力
-circuit.PulseVoltageSource('input', 'vin', circuit.gnd,
-    initial_value=0@u_V, pulsed_value=5@u_V,
-    rise_time=1@u_us, fall_time=1@u_us,
-    pulse_width=100@u_us, period=200@u_us)
-
-# RCフィルタ
-circuit.R('1', 'vin', 'vout', 1@u_kOhm)
-circuit.C('1', 'vout', circuit.gnd, 100@u_nF)
-
-simulator = circuit.simulator()
-
-# 過渡解析：0〜500us、ステップ1us
-analysis = simulator.transient(step_time=1@u_us, end_time=500@u_us)
-
-# プロット
-import matplotlib.pyplot as plt
-
-plt.figure(figsize=(10, 6))
-plt.plot(analysis.time * 1e6, analysis['vin'], label='Vin')
-plt.plot(analysis.time * 1e6, analysis['vout'], label='Vout')
-plt.xlabel('Time (us)')
-plt.ylabel('Voltage (V)')
-plt.legend()
-plt.grid(True)
-plt.savefig('transient.png')
-```
-
----
-
-## 4. 実践的な例
-
-### LED駆動回路のシミュレーション
-
-```python
-from PySpice.Spice.Netlist import Circuit
-from PySpice.Unit import *
-
-circuit = Circuit('LED Driver')
-
-# 電源
-circuit.V('cc', 'vcc', circuit.gnd, 5@u_V)
-
-# 電流制限抵抗
-circuit.R('limit', 'vcc', 'led_anode', 150@u_Ohm)
-
-# LED（ダイオードモデル）
-circuit.D('led', 'led_anode', circuit.gnd, model='LED_RED')
-circuit.model('LED_RED', 'D', Is=1e-20, N=1.5, Rs=2)
-
-# シミュレーション
-simulator = circuit.simulator()
-analysis = simulator.operating_point()
-
-# LED電流計算
-i_led = (float(analysis['vcc']) - float(analysis['led_anode'])) / 150
-print(f"LED Current: {i_led*1000:.1f} mA")
-print(f"LED Voltage: {float(analysis['led_anode']):.2f} V")
-```
-
-### オペアンプ増幅回路
-
-```python
-from PySpice.Spice.Netlist import Circuit
-from PySpice.Unit import *
-
-circuit = Circuit('OpAmp Amplifier')
-
-# 電源
-circuit.V('cc', 'vcc', circuit.gnd, 12@u_V)
-circuit.V('ee', 'vee', circuit.gnd, -12@u_V)
-
-# 信号源
-circuit.SinusoidalVoltageSource('in', 'vin', circuit.gnd,
-    amplitude=100@u_mV, frequency=1@u_kHz)
-
-# オペアンプ（理想モデル）
-# 非反転増幅：Gain = 1 + Rf/Ri = 1 + 90k/10k = 10
-circuit.R('i', 'inv_in', circuit.gnd, 10@u_kOhm)
-circuit.R('f', 'inv_in', 'vout', 90@u_kOhm)
-
-# 理想オペアンプ
-circuit.VoltageControlledVoltageSource('opamp', 'vout', circuit.gnd,
-    'vin', 'inv_in', voltage_gain=1e6)
-
-# シミュレーション
-simulator = circuit.simulator()
-analysis = simulator.transient(step_time=1@u_us, end_time=5@u_ms)
-
-# プロット
-import matplotlib.pyplot as plt
-
-plt.figure(figsize=(10, 6))
-plt.plot(analysis.time * 1e3, analysis['vin'] * 10, label='Vin x10')
-plt.plot(analysis.time * 1e3, analysis['vout'], label='Vout')
-plt.xlabel('Time (ms)')
-plt.ylabel('Voltage (V)')
-plt.legend()
-plt.grid(True)
-plt.title('Non-inverting Amplifier (Gain=10)')
-plt.savefig('opamp_amp.png')
-```
-
----
-
-## 5. SKiDLとの連携
-
-### SKiDL→SPICE変換
-
-```python
-from skidl import *
-
-# SKiDLで回路設計
-vcc = Net('VCC')
-gnd = Net('GND')
-gnd.drive = POWER
-
-r1 = Part("Device", 'R', value='10K')
-r2 = Part("Device", 'R', value='10K')
-vcc & r1 & Net('VOUT') & r2 & gnd
-
-# SPICEネットリスト生成
-generate_netlist(file_='circuit.cir', tool=SPICE)
-
-# PySpiceで読み込み
-from PySpice.Spice.Parser import SpiceParser
-
-parser = SpiceParser(path='circuit.cir')
-circuit = parser.build_circuit()
-
-# シミュレーション実行
-simulator = circuit.simulator()
-analysis = simulator.operating_point()
-```
-
----
-
-## 6. トラブルシューティング
-
-### よくあるエラー
-
-| エラー | 原因 | 対処 |
-|--------|------|------|
-| `no DC path to ground` | グラウンドへの経路がない | GNDノードの確認 |
-| `singular matrix` | 回路が不定 | 浮いているノードを確認 |
-| `timestep too small` | 収束しない | ステップを大きく |
-| `node not found` | ノード名エラー | スペルチェック |
-
-### デバッグのコツ
-
-```python
-# 回路のネットリスト確認
-print(circuit)
-
-# ノード一覧
-print(circuit.node_names)
-
-# ngspiceのログ
-simulator = circuit.simulator()
-simulator.options(filetype='ascii')  # 出力形式
-```
+- [ngspice User's Manual](https://ngspice.sourceforge.io/docs/ngspice-manual.pdf)
+- [ngspice official documentation](https://ngspice.sourceforge.io/docs.html)
+- [PySpice 1.6 Simulator API](https://pyspice.fabrice-salvaire.fr/releases/v1.6/api/PySpice/Spice/Simulator.html)
+- [SKiDL documentation](https://devbisme.github.io/skidl/)

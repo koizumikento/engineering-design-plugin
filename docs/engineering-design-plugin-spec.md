@@ -1,237 +1,182 @@
 # Engineering Design Skills Architecture
 
-## 概要
+## Objective
 
-このリポジトリは、機械設計、回路設計、統合設計を扱うエージェントスキル集である。自然言語要望から仕様書を整理し、CadQuery / SKiDL ベースの設計作業と検証へつなげる。
+自然言語要望から、traceable requirements、parametric design artifacts、tool-based checks、evidence-backed handoffを一貫して生成する。スキルは専門家の承認、規格本文、試験、製造工程能力を代替しない。
 
-以前は Claude Code プラグインとして構成されていたが、現在は `skills/` を正本とし、クライアント固有の `commands/` や `hooks/` に依存しない構成へ整理している。Claude Code 向けの `.claude-plugin/` はインストール互換のため維持し、旧互換レイヤーにあった運用ルールは本ドキュメントと `skills/*/SKILL.md` に移管した。
+## Design principles
 
-Codex plugin 化では `plugins/engineering-design` を開発用 plugin root とし、その下の `.codex-plugin/plugin.json` から `./skills/` を参照する。GitHub install 用には `.agents/plugins/engineering-design` に配布コピーを置き、marketplace からその plugin root を指す。これは Codex が GitHub marketplace 追加時に `.agents/plugins` だけを sparse checkout する場合でも plugin root と skills を取得できるようにするためである。Claude Code 向けの `.claude-plugin/` は repo ルートに維持する。
+1. `skills/` is the source of truth.
+2. `SKILL.md` keeps only core workflow and routing; detailed knowledge lives in focused `references/`.
+3. Facts, requirements, design choices, assumptions, and unresolved items remain distinguishable.
+4. Every normative requirement connects to an acceptance criterion, verification method, and evidence.
+5. Generic rules of thumb never masquerade as standards or component-specific values.
+6. Generated artifacts are independently parsed, measured, or inspected when the toolchain allows it.
+7. Missing or unsupported integration data remains `NOT_EVALUATED`, not `PASS`.
 
-## 設計原則
-
-1. スキル正本
-   - エージェントが参照する主定義は `skills/*/SKILL.md`
-   - 詳細知識は各スキルの `references/` に置く
-   - OpenAI/Codex 向けの軽量メタデータは `skills/*/agents/openai.yaml` に置く
-2. クライアント非依存
-   - 実行パスは `scripts/...` や `templates/...` のリポジトリ相対表現を使う
-   - 特定クライアントのスラッシュコマンド名は仕様やテンプレートに持ち込まない
-   - Codex plugin manifest は配布メタデータだけを持ち、運用手順は `skills/*/SKILL.md` に残す
-3. 仕様書先行
-   - まず `spec-writing` で検証可能な仕様に落とし込み、承認後に設計コード生成へ進む
-4. 実行後検証を明示
-   - 旧 hooks にあった検証観点は、各スキルの実行手順とチェックリストへ統合する
-
-## ワークフロー
-
-### 単体設計
+## End-to-end flow
 
 ```text
-[ユーザー要望]
-      ↓
-[spec-writing]
-      ↓
-[仕様書レビュー/承認]
-      ↓
-[mechanical-cad または circuit-design]
-      ↓
-[検証と追加出力]
-      ↓
-[STEP/STL or Netlist/BOM/KiCad/Simulation]
+request / source artifacts
+          |
+          v
+spec-writing: IDs, sources, interfaces, acceptance, verification
+          |
+          +--------------------+
+          |                    |
+          v                    v
+mechanical-cad             circuit-design
+CadQuery/STEP/report       SKiDL/KiCad/BOM/ERC/SPICE
+          |                    |
+          +----------+---------+
+                     v
+integration: common frame, tolerance, envelope, evidence
+                     |
+                     v
+PASS / FAIL / CONDITIONAL / NOT EVALUATED + next evidence
 ```
 
-### 統合設計
+Concept work may proceed with visible assumptions. Production, safety, compliance, or irreversible work requires resolution of decisions that materially affect the result.
 
-```text
-[ユーザー要望（筐体+回路）]
-      ↓
-[spec-writing]
-      ↓
-[統合仕様書レビュー/承認]
-      ↓
-[mechanical-cad] + [circuit-design]
-      ↓
-[integration]
-      ↓
-[整合性レポート]
-```
-
-## ディレクトリ構造
-
-```text
-engineering-design-plugin/
-├── .agents/
-│   └── plugins/
-│       ├── marketplace.json
-│       └── engineering-design/
-├── plugins/
-│   └── engineering-design/
-│       ├── plugin.json
-│       ├── .codex-plugin/
-│       │   └── plugin.json
-│       └── skills/
-├── skills/
-│   ├── spec-writing/
-│   │   ├── SKILL.md
-│   │   ├── agents/
-│   │   │   └── openai.yaml
-│   │   └── references/
-│   ├── mechanical-cad/
-│   │   ├── SKILL.md
-│   │   ├── agents/
-│   │   │   └── openai.yaml
-│   │   └── references/
-│   ├── circuit-design/
-│   │   ├── SKILL.md
-│   │   ├── agents/
-│   │   │   └── openai.yaml
-│   │   ├── references/
-│   │   └── scripts/
-│   └── integration/
-│       ├── SKILL.md
-│       ├── agents/
-│       │   └── openai.yaml
-│       └── references/
-├── .claude-plugin/
-│   ├── plugin.json
-│   └── marketplace.json
-├── scripts/
-│   ├── cadquery_runner.py
-│   ├── preview_generator.py
-│   └── integration_checker.py
-├── templates/
-│   └── spec/
-├── examples/
-├── docs/
-├── README.md
-└── LICENSE
-```
-
-## Codex plugin パッケージング
-
-- plugin root は `plugins/engineering-design` とする
-- required manifest は `plugins/engineering-design/.codex-plugin/plugin.json`
-- GitHub install 用の marketplace は `.agents/plugins/engineering-design` を source path とする
-- installer 互換のため repo root と plugin root 直下にも `plugin.json` を置く
-- `skills` フィールドは plugin root から見た `./skills/` を指す
-- Codex plugin 名は Claude 側と揃えて `engineering-design` とする
-- `skills/*/SKILL.md` が operational source-of-truth のまま残り、配布前に `plugins/engineering-design/skills/` へ同期する
-- `skills/*/agents/openai.yaml` は repo 管理用メタデータとして維持し、plugin manifest に重複転記しない
-- `.app.json` と `.mcp.json` は現時点では追加しない
-- repo-local marketplace は `.agents/plugins/marketplace.json` に置き、`source.path: "./.agents/plugins/engineering-design"` で GitHub install 用 plugin root を指す
-- `.claude-plugin/` は削らず、Codex と Claude の install metadata を同居させる
-
-開発用 plugin root を `plugins/engineering-design` に分離する方針は、`skills/` を source-of-truth として維持するためである。一方、GitHub からの marketplace install では `.agents/plugins` だけが sparse checkout される場合があるため、配布用 plugin root と同期済みの `skills/` ディレクトリを `.agents/plugins/engineering-design` に同梱する。
-
-## スキルごとの責務
+## Skill contracts
 
 ### `spec-writing`
 
-- 入力: 自然言語要望
-- 出力: `specs/[project-name]-spec.md` または `specs/[project-name]-integrated-spec.md`
-- 参照先: `templates/spec/`, `skills/spec-writing/references/spec-templates.md`
-- ルール:
-  - 要件は検証可能な数値または明確な条件に落とす
-  - 最後に承認チェックボックスを置く
+Input:
+
+- natural-language need
+- existing spec/drawing/datasheet/model when present
+
+Output:
+
+- `specs/<project>-spec.md`
+- `specs/<project>-integrated-spec.md`
+
+Required structure:
+
+- document maturity and status
+- stable requirement/interface IDs
+- source or rationale
+- units, conditions, tolerances/limits
+- assumptions/TBD/TBR with owner and resolution
+- verification matrix
 
 ### `mechanical-cad`
 
-- 入力: 仕様書または自然言語要望から整理した内部CAD brief
-- 一次成果物: STEP/STP
-- 標準副成果物: STL, 検査レポート
-- レビュー副成果物: 複数視点PNGプレビュー
-- 要求時のみ: DXF, SVG
-- 実行:
-  - `uv run python -m py_compile input.py`
-  - `uv run python scripts/cadquery_runner.py input.py -o outputs/ --report --fail-on-invalid`
-  - `uv run python scripts/preview_generator.py outputs/[project-name].step -o outputs/ --all-views`
-- 備考:
-  - STEPを設計交換と統合検証の一次成果物として扱う
-  - STLは3Dプリントやmesh viewer用の副成果物であり、寸法正本にしない
-  - 既製部品、組立データム、出力形式の詳細は `skills/mechanical-cad/references/` に分離する
-- 実行後確認:
-  - `isValid()` による形状妥当性
-  - 体積、表面積、重心、バウンディングボックス、トポロジ数
-  - STEP/STL/PNG/検査レポートの生成確認
+Input:
+
+- approved spec or internal CAD brief
+- mating-part source geometry/drawings
+- manufacturing and output requirements
+
+Outputs:
+
+- CadQuery Python
+- STEP primary neutral geometry
+- purpose-specific STL/3MF/DXF/SVG/PNG
+- CAD summary JSON
+
+Checks:
+
+```bash
+uv run python -m py_compile input.py
+uv run python scripts/cadquery_runner.py input.py -o outputs/ --report --fail-on-invalid
+uv run python scripts/preview_generator.py outputs/input.step -o outputs/ --all-views
+```
+
+Shape validity, dimensions, topology, visible geometry, assembly transform, tolerance stack, and process-specific constraints are separate checks.
 
 ### `circuit-design`
 
-- 入力: 仕様書または自然言語要望
-- 標準出力: BOM, ERC summary, 設計メモ, KiCad v9 回路図/プロジェクト
-- 追加出力: ネットリスト, シミュレーション結果
-- 実行:
-  - `uv run python skills/circuit-design/scripts/skidl_runner.py input.py -o outputs/`
-  - `uv run python skills/circuit-design/scripts/kicad_sch_export.py input.py -o outputs/`
-  - `uv run python skills/circuit-design/scripts/skidl_runner.py input.py -o outputs/ --netlist`（ネットリストが必要な場合のみ）
-  - `uv run python skills/circuit-design/scripts/pyspice_sim.py input.py -o outputs/ --dc|--ac|--tran`
-- 備考:
-  - 製造/PCB 連携の正本は `kicad_sch_export.py` とする
-  - 標準成果物は `outputs/reports/` にレポート類、`outputs/kicad/[project-name]/` に KiCad プロジェクト一式を分けて配置する
-  - `skills/circuit-design/scripts/skidl_runner.py` と `skills/circuit-design/scripts/kicad_sch_export.py` は `skills/circuit-design/scripts/skidl_utils.py` の共通ローダを使い、importlib 起因の root hierarchy node warning を抑える
-  - KiCad v9 exporter はサポート済みトポロジーから `.kicad_sch` / `.kicad_pro` を生成し、未対応回路は exporter 側にレイアウト/記号対応を追加する
-  - 外部 I/O ネットは必要に応じてコネクタやテストポイントとしてモデル化し、KiCad 図にも同じ境界要素を出す
-- 実行後確認:
-  - `uv run python -m py_compile input.py`
-  - `ERC()` の実行
-  - BOM/ERC summary/設計メモ/`.kicad_sch`/`.kicad_pro` の生成確認
+Input:
+
+- electrical requirements and interfaces
+- exact component sources when part-specific behavior matters
+
+Outputs:
+
+- SKiDL Python as logical design definition
+- BOM, SKiDL ERC and design summary
+- KiCad 9 schematic/project for review and PCB handoff
+- optional netlist and simulation evidence
+
+Checks:
+
+```bash
+uv run python -m py_compile input.py
+uv run python skills/circuit-design/scripts/skidl_runner.py input.py -o outputs/
+uv run python skills/circuit-design/scripts/kicad_sch_export.py input.py -o outputs/
+kicad-cli sch erc --exit-code-violations --format json -o outputs/reports/project-kicad-erc.json outputs/kicad/project/project.kicad_sch
+```
+
+The custom exporter has bounded topology coverage. SKiDL native `generate_schematic()` is a current alternative. Both require visual and KiCad ERC review.
 
 ### `integration`
 
-- 入力: 統合仕様書
-- 出力: 整合性レポート
-- 実行:
-  - `uv run python scripts/integration_checker.py specs/[project-name]-integrated-spec.md -o outputs/`
-- 実行後確認:
-  - 基板外形と筐体内寸
-  - コネクタ位置と開口位置
-  - 取付穴位置
-  - 部品高さとクリアランス
+Input:
 
-## 旧 hooks から移した検証ポリシー
+- integrated spec and interface table
+- PCB/enclosure/component geometry and revisions when available
+- acceptance thresholds from requirements
 
-Claude Code 固有の hook 実装に置かれていた検証観点は、今後はスキル実行時の明示チェックとして扱う。
+Output:
 
-### Python スクリプト共通
+- `outputs/<project>-integration-report.md`
 
-- `uv run python -m py_compile` で構文エラーを検出する
-- `eval()` / `exec()` のような不要な動的実行は避ける
-- `os`, `subprocess`, `shutil`, `sys` などのシステム操作系 import は必要性を説明できる場合だけ使う
+Text screening:
 
-### CadQuery スクリプト
+```bash
+uv run python scripts/integration_checker.py specs/project-integrated-spec.md -o outputs/ --json
+```
 
-- `isValid()` を含める
-- 実行後に自己交差や `BOPAlgo_AlertSelfIntersection` を確認する
-- `scripts/cadquery_runner.py --report` で体積、表面積、重心、バウンディングボックス、トポロジ数を記録する
-- 可視形状を変更した場合は `scripts/preview_generator.py --all-views` で複数視点PNGを生成する
+The checker evaluates parsed nominal dimensions only. 3D collision/minimum-gap, dynamic/service envelopes, worst-case tolerance, thermal, EMC/ESD, vibration, ingress, and compliance require additional methods.
 
-### SKiDL スクリプト
+## Artifact ownership
 
-- `ERC()` を含める
-- 電源ネット、未接続ピン、モデル不足を確認する
+| Artifact | Role |
+|---|---|
+| specification Markdown | requirements/interface baseline |
+| CadQuery Python | parametric mechanical definition |
+| STEP | neutral mechanical exchange and integration geometry |
+| SKiDL Python | logical circuit definition |
+| KiCad schematic/project | readable ECAD review and PCB handoff |
+| STL/3MF/DXF/SVG/PNG | purpose-specific derivatives |
+| JSON/CSV/plots/reports | verification evidence with stated scope |
 
-## テンプレートと承認フロー
+Do not edit two supposed sources of truth independently. If generated KiCad or CAD exchange data becomes the editable master, record the transition and reverse-flow plan.
 
-- 仕様書テンプレートは `templates/spec/` に置く
-- 承認文言は特定コマンド名ではなく、対応するスキル名で記述する
-- 承認済みでない仕様書に対してはコード生成を進めない
+## Reference policy
 
-## OpenAI/Codex メタデータ
+- Prefer current official documentation, manufacturer datasheets/models, standards bodies, and approved process guides.
+- Record version/revision and retrieval date for unstable sources.
+- Do not copy paid standards tables into the repo.
+- Label calculations and inferences separately from source facts.
+- Cite exact MPN documentation for pinout, footprint, thermal, stability, opening, and mating geometry.
 
-- `agents/openai.yaml` では `interface.display_name`, `interface.short_description`, `interface.default_prompt` を設定する
-- `policy.allow_implicit_invocation` を明示し、暗黙起動の可否をスキル単位で制御する
-- この repo では追加の MCP 依存がないため `dependencies.tools` は未使用
+Current source families used by references include CadQuery official docs, SKiDL official docs, KiCad 9 docs, ngspice/PySpice docs, NASA Systems Engineering Handbook, and JSA/IEC official standards catalogs.
 
-## Codex plugin 仕様との差分
+## Plugin packaging
 
-- 実装済み:
-  - `plugins/engineering-design/.codex-plugin/plugin.json`
-  - `plugins/engineering-design` を plugin root にした repo-local marketplace 構成
-  - GitHub install 用に同梱した `SKILL.md` / `references/` / `scripts/`
-  - install-surface 向けの `interface` 拡張メタデータ
-- 未実装:
-  - `.app.json`
-  - `.mcp.json`
-  - plugin 用 `assets/`
-- 判断:
-  - 現段階では「Claude Code plugin 構造を維持したままローカル導入できる最小 Codex plugin」を優先し、公開ディレクトリ向けの装飾は後回しにする
+```text
+.agents/plugins/marketplace.json
+  source.path -> ./plugins/engineering-design
+
+plugins/engineering-design/.codex-plugin/plugin.json
+  skills -> ./../../skills/
+```
+
+`plugins/engineering-design/skills/` and `.agents/plugins/engineering-design/skills/` copies are intentionally absent. The repo-local marketplace and plugin package point to the committed `skills/` source of truth.
+
+Plugin metadata is presentation/install information only. Operational instructions stay in `skills/*/SKILL.md`; UI metadata stays in `skills/*/agents/openai.yaml`.
+
+## Validation
+
+For every skill change:
+
+1. validate all skill folders with `quick_validate.py`;
+2. check reference links and repository-relative paths;
+3. compile changed Python scripts;
+4. execute affected helper entrypoints against representative examples;
+5. inspect generated reports/artifacts;
+6. verify plugin manifest and marketplace JSON structure;
+7. review `git diff` for unintended copied workflow logic.

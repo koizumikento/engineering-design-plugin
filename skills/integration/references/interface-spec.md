@@ -1,283 +1,165 @@
-# 基板-筐体インターフェース仕様
+# PCB・筐体インターフェース設計
 
-## 概要
+## 目次
 
-基板（PCB）と筐体を統合する際のインターフェース設計ガイドです。
+1. チェックの限界
+2. 座標系とデータム
+3. Interface Control Table
+4. 許容差とマージン
+5. 形状・取付・開口
+6. 動的・組立・保守エンベロープ
+7. 熱・EMC・防塵防水
+8. 検証とレポート
+9. 公式資料
 
----
+## 1. チェックの限界
 
-## 1. 基板外形と筐体内寸
+`scripts/integration_checker.py` はMarkdownに記載された外形、厚さ、ボス、最大部品高などを比較するスクリーニングツールである。次は単独では証明できない。
 
-### 基本ルール
+- 任意形状同士の最小距離または干渉
+- コネクタの挿抜軌跡、ラッチ、指・工具アクセス
+- ケーブル曲げ、可動部、組立経路
+- PCB反り、筐体変形、熱膨張を含む最悪公差
+- 放熱、EMC/ESD、耐振動、防塵防水性能
 
-```
-筐体内寸 = 基板外形 + クリアランス × 2
+不足データや未対応項目を `PASS` に変換しない。STEP/BREP/PCB 3Dデータがある場合は共通座標系に配置して追加確認する。
 
-例：
-基板: 50 × 30mm
-クリアランス: 2mm
-筐体内寸: 54 × 34mm
-```
+## 2. 座標系とデータム
 
-### クリアランス設計
+統合前に次を固定する。
 
-| 製造方法 | 最小クリアランス | 推奨クリアランス |
-|---------|-----------------|-----------------|
-| 3Dプリント（FDM） | 1.5mm | 2.0mm |
-| 3Dプリント（SLA） | 1.0mm | 1.5mm |
-| 射出成形 | 0.5mm | 1.0mm |
-| 板金 | 1.0mm | 1.5mm |
+- assembly frame: 原点、+X/+Y/+Z、単位
+- PCB frame: 基板原点、上面/下面、部品面、厚さ方向
+- enclosure frame: 底面、中心面、合わせ面、開口基準面
+- transform: PCB frameからassembly frameへの平行移動・回転
+- handedness: 右手系/左手系
+- revision: 各モデル・図面の版
 
-### 基板の傾き考慮
-
-```
-対角線長 = √(W² + H²)
-必要クリアランス ≥ (対角線長 - W) / 2
-
-例：50×30mm基板
-対角線 = √(50² + 30²) = 58.3mm
-傾き考慮 = (58.3 - 50) / 2 = 4.15mm
-```
-
----
-
-## 2. 取付穴設計
-
-### 基板側の穴配置
-
-```
-推奨位置：各コーナーから3〜5mm内側
-穴径：M3 → φ3.2mm、M2.5 → φ2.7mm、M2 → φ2.2mm
-
-例（50×30mm基板）：
-穴位置：(3, 3), (47, 3), (3, 27), (47, 27)
-```
-
-### 筐体側のボス設計
-
-| ねじ | ボス外径 | ボス内径（タップ下穴） | ボス高さ |
-|------|---------|---------------------|---------|
-| M2 | 4.0mm | 1.6mm | 4〜6mm |
-| M2.5 | 5.0mm | 2.1mm | 5〜8mm |
-| M3 | 6.0mm | 2.5mm | 6〜10mm |
-
-### CadQueryでのボス実装
-
-```python
-import cadquery as cq
-
-def add_pcb_bosses(body, pcb_width, pcb_depth, hole_offset, boss_height, boss_od, tap_hole):
-    """基板取付ボスを追加"""
-    positions = [
-        (hole_offset - pcb_width/2, hole_offset - pcb_depth/2),
-        (pcb_width/2 - hole_offset, hole_offset - pcb_depth/2),
-        (hole_offset - pcb_width/2, pcb_depth/2 - hole_offset),
-        (pcb_width/2 - hole_offset, pcb_depth/2 - hole_offset),
-    ]
-
-    for x, y in positions:
-        boss = (
-            cq.Workplane("XY")
-            .workplane(offset=wall_thickness)
-            .center(x, y)
-            .circle(boss_od / 2)
-            .extrude(boss_height)
-            .faces(">Z").workplane()
-            .hole(tap_hole)
-        )
-        body = body.union(boss)
-
-    return body
-```
-
----
-
-## 3. コネクタ開口部
-
-### コネクタ寸法と開口部
-
-| コネクタ | コネクタ寸法 | 開口部寸法 | 備考 |
-|---------|------------|-----------|------|
-| USB-A | 12.0×4.5mm | 13.0×5.5mm | 上下左右0.5mm |
-| USB-C | 8.9×3.2mm | 10.0×4.0mm | 挿抜考慮 |
-| microUSB | 7.5×2.7mm | 8.5×3.5mm | |
-| φ3.5ジャック | φ6.0mm | φ7.0mm | |
-| DC端子φ5.5 | φ8.0mm | φ9.0mm | |
-| RJ45 | 16.0×13.5mm | 17.0×14.5mm | |
-
-### 開口部の位置合わせ
-
-```
-開口中心 = 基板原点 + コネクタオフセット
-
-例：
-基板原点（筐体中心から）: (-25, -15)
-コネクタ位置（基板上）: (25, 0)  # 右端中央
-開口中心: (0, -15)
-
-高さ:
-基板下面高さ = ボス高さ
-コネクタ中心高さ = 基板下面高さ + 基板厚 + コネクタ高さ/2
-```
-
-### CadQueryでの開口部実装
-
-```python
-import cadquery as cq
-
-def add_connector_opening(body, face_selector, position, width, height, fillet=1.0):
-    """コネクタ開口部を追加"""
-    opening = (
-        body
-        .faces(face_selector).workplane(centerOption="CenterOfMass")
-        .center(position[0], position[1])
-        .rect(width, height)
-        .cutThruAll()
-    )
-
-    if fillet > 0:
-        # 開口部エッジにフィレット
-        pass  # 選択が複雑なため省略
-
-    return opening
-```
-
----
-
-## 4. 部品高さと内部空間
-
-### 高さ計算
-
-```
-必要内部高さ = ボス高さ + 基板厚 + 最大部品高 + クリアランス
-
-例：
-ボス高さ: 5mm
-基板厚: 1.6mm
-最大部品高: 12mm（電解コンデンサ）
-クリアランス: 2mm
-必要内部高さ: 20.6mm → 21mm
-```
-
-### よくある部品高さ
-
-| 部品 | 高さ | 備考 |
-|------|------|------|
-| 0603チップ部品 | 0.5mm | |
-| 0805チップ部品 | 0.7mm | |
-| SOICパッケージ | 1.75mm | |
-| DIP-8 | 4.0mm | |
-| 電解コンデンサφ6.3 | 11mm | |
-| USB-Cコネクタ | 3.2mm | |
-| タクトスイッチ | 3.5〜5.0mm | |
-
----
-
-## 5. 放熱設計
-
-### 通気口
-
-```python
-def add_ventilation_slots(body, face, slot_width=2, slot_length=15, spacing=4, count=5):
-    """通気スリットを追加"""
-    result = body
-    for i in range(count):
-        offset = (i - (count-1)/2) * spacing
-        result = (
-            result
-            .faces(face).workplane()
-            .center(0, offset)
-            .slot2D(slot_length, slot_width)
-            .cutThruAll()
-        )
-    return result
-```
-
-### ヒートシンク取付
-
-| 発熱量 | 対策 |
-|--------|------|
-| < 0.5W | 自然対流（通気口） |
-| 0.5〜2W | ヒートシンク + 通気口 |
-| > 2W | 強制空冷（ファン） |
-
----
-
-## 6. 防水設計
-
-### パッキン溝
-
-```
-Oリング溝寸法（JIS B 2401）:
-溝幅 = 線径 × 1.3〜1.4
-溝深さ = 線径 × 0.7〜0.8
-
-例（P10 Oリング、線径2.4mm）:
-溝幅: 3.1〜3.4mm
-溝深さ: 1.7〜1.9mm
-```
-
-### ケーブルグランド
-
-| 規格 | ケーブル径 | 取付穴径 |
-|------|-----------|---------|
-| PG7 | 3〜6.5mm | 12.5mm |
-| PG9 | 4〜8mm | 15.2mm |
-| PG11 | 5〜10mm | 18.6mm |
-| M12 | 3〜6.5mm | 12.0mm |
-| M16 | 5〜10mm | 16.0mm |
-
----
-
-## 7. チェックリスト
-
-### 設計完了チェック
-
-- [ ] 基板サイズ + クリアランス ≤ 筐体内寸
-- [ ] 取付穴位置が一致（±0.5mm）
-- [ ] コネクタ開口部の位置・サイズが適切
-- [ ] 部品高さ + クリアランス ≤ 内部高さ
-- [ ] 放熱経路が確保されている
-- [ ] ケーブル引き出し部が考慮されている
-
-### 製造チェック
-
-- [ ] 最小肉厚を満たしている
-- [ ] アンダーカットがない（または分割可能）
-- [ ] 抜き勾配がある（射出成形の場合）
-- [ ] 組立手順が明確
-
----
-
-## 8. 統合仕様書テンプレート
+座標値はフレーム名と組で記載する。
 
 ```markdown
-## 基板-筐体インターフェース
-
-### 基板情報
-- 外形: W × H mm
-- 厚さ: mm
-- 取付穴: Mx × N箇所
-- 穴位置: (x1, y1), (x2, y2), ...
-
-### 筐体情報
-- 内寸: W × H × D mm
-- ボス位置: (x1, y1), (x2, y2), ...
-- ボス高さ: mm
-
-### コネクタ
-| 名称 | 基板位置 | 開口位置 | サイズ |
-|------|---------|---------|--------|
-| USB-C | | | |
-
-### 部品高さ
-- 最大部品高: mm
-- 部品名: xxx
-- 位置: (x, y)
-
-### チェック結果
-- [ ] クリアランス: OK / NG
-- [ ] 取付穴: OK / NG
-- [ ] コネクタ開口: OK / NG
-- [ ] 高さ: OK / NG
+assembly frame: enclosure bottom inner face center; +Z toward lid; mm
+PCB transform: translation (0, 0, 6.6), rotation (0, 0, 0 deg)
+PCB mounting holes in PCB frame: (-22, -12), (22, -12), (-22, 12), (22, 12)
 ```
+
+## 3. Interface Control Table
+
+```markdown
+| ID | interface | owner A | owner B | source/rev | frame/datum | nominal | tolerance | required margin | verification |
+|---|---|---|---|---|---|---|---|---|---|
+| IF-MNT-001 | PCB hole to boss | EE | ME | PCB-A/r3, ENC-A/r2 | assembly/A | coordinates | hole/boss position tolerances | radial clearance | CAD + inspection |
+```
+
+所有者を分けることで、PCB変更か筐体変更か、どちらが追従すべきかを明確にする。
+
+## 4. 許容差とマージン
+
+クリアランスは単一の経験値ではなく、最悪条件で評価する。
+
+```text
+available gap = enclosure boundary - transformed component envelope
+worst-case margin = nominal gap - enclosure tolerance - PCB tolerance
+                    - placement tolerance - component envelope tolerance
+                    - deformation/thermal allowance
+```
+
+RSSなどの統計合成を使う場合は、分布と独立性の根拠を記録する。安全、干渉、シールなど境界超過を許容できない項目は、根拠なく統計合成へ置き換えない。
+
+基準値の優先順位:
+
+1. 承認済みインターフェース要求
+2. 相手部品のメーカー図面/3Dモデル
+3. 採用製造工程の能力・設計ガイド
+4. 適用規格
+5. 明記した暫定仮定
+
+## 5. 形状・取付・開口
+
+### PCB外形
+
+- 直交外形だけでなく切欠き、面取り、タブ、レール挿入経路を確認する。
+- PCB厚は公称値だけでなく許容差、銅/実装、局所突起を確認する。
+- エッジコネクタやアンテナ領域は専用keep-outとして扱う。
+
+### 取付
+
+- 穴径、めっき有無、ボス外径、座面、ねじ頭、ワッシャ、インサートを含める。
+- PCB穴とボス中心の単純一致だけでなく、穴径差と位置公差から組立可能性を評価する。
+- ねじ長、かかり代、底付き、基板圧縮、絶縁距離、締付工具アクセスを確認する。
+- 位置決め機能と締結機能を区別する。全締結点を過拘束にしない。
+
+### コネクタ開口
+
+型式名だけで開口を決めない。採用コネクタと相手プラグの図面から次を取る。
+
+- receptacle datumと基板位置
+- shell/latch最大包絡
+- プラグ挿抜方向とストローク
+- 開口の板厚方向形状、面取り、R
+- 指、工具、ケーブル、ストレインリリーフのエンベロープ
+- PCB/部品/筐体の累積公差
+
+USB-Cなどの規格上のインターフェース形状と、特定コネクタの実装高さ・外形・推奨開口は同一ではない。必ず採用部品のメーカー資料を使う。
+
+### 高さ
+
+上面と下面を別に確認する。`最大部品高` 1値だけでは、局所的な蓋リブ、ボス、ねじ、ヒートシンクとの干渉を見落とす。
+
+```text
+component top Z = PCB seating Z + PCB thickness + placed component top envelope
+component bottom Z = PCB seating Z - bottom-side component envelope
+```
+
+## 6. 動的・組立・保守エンベロープ
+
+- プラグ挿抜、スイッチ/ボタン操作、表示視野
+- ケーブル最小曲げ半径、引張、ストレインリリーフ
+- アンテナkeep-out、センサー露出、通気流路
+- 蓋の開閉、スナップ変形、ガスケット圧縮
+- ドライバー、レンチ、ピック&プレース、はんだごてアクセス
+- 部品交換、再作業、清掃、点検
+
+静止状態で非干渉でも、組立不能なら不合格である。
+
+## 7. 熱・EMC・防塵防水
+
+### 熱
+
+発熱量だけで対策を固定しない。損失、許容接合温度、周囲温度、熱抵抗、接触、放射/対流、姿勢、通気阻害をモデルまたは試験条件として定義する。
+
+### EMC/ESD
+
+コネクタ入口、シールド/シャーシ接続、リターン経路、筐体継目、ケーブル、保護部品配置を回路・PCB・筐体の共同インターフェースとして扱う。形状確認だけで適合を主張しない。
+
+### 防塵防水
+
+シール面、ガスケット/Oリング、締結間隔、圧縮、表面状態、ベント、コネクタ、ケーブルグランド、排水を一つの封止系として追跡する。IPコードは設計特徴ではなく、規定条件の試験で確認する保護等級である。
+
+2026年1月にJIS C 0920:2003は廃止され、移行先はJIS C 60529:2026となった。要求には適用版と試験条件を明記する。
+
+## 8. 検証とレポート
+
+結果の状態:
+
+- PASS: 根拠と合格基準を満たす
+- FAIL: 基準を満たさない
+- CONDITIONAL: 仮定または暫定データの下で満たす
+- NOT EVALUATED: データ、ツール、方法が不足
+
+レポートには次を含める。
+
+- 入力ファイル、出典、revision
+- 座標系とtransform
+- 各要求ID、判定、最小マージン
+- 使用した公差・仮定
+- スクリーニングと3D/試験の区別
+- 未評価項目と必要な次の証拠
+- 修正候補と所有者
+
+## 9. 公式資料
+
+- [NASA Systems Engineering Handbook Rev. 2](https://ntrs.nasa.gov/api/citations/20170001761/downloads/20170001761.pdf) — interface management、interface requirements document、verification matrix。
+- [JIS C 60529:2026（日本規格協会）](https://webdesk.jsa.or.jp/books/W11M0090/?bunsyo_id=JIS+C+60529%3A2026) — 現行のIPコードJIS。
+- [JIS C 0920:2003（廃止・移行先表示）](https://webdesk.jsa.or.jp/books/W11M0090/index/?bunsyo_id=JIS+C+0920%3A2003) — 2026年廃止とJIS C 60529への移行記録。
+- [IEC 60529 consolidated edition 2.2](https://webstore.iec.ch/en/publication/2452) — 国際規格の公式カタログ情報。

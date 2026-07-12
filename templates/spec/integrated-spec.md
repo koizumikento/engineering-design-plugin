@@ -1,110 +1,121 @@
 # 統合設計仕様書
 
-## 基本情報
-- **プロジェクト名**: [名称]
-- **バージョン**: 1.0
+## 文書管理
+
+- **プロジェクト名**: [name]
+- **版**: 0.1
 - **作成日**: YYYY-MM-DD
+- **成熟度**: Concept | Prototype | Production handoff
 - **ステータス**: Draft | Review | Approved
+- **owner/reviewer**:
 
----
+## Scope and sources
 
-## 機械設計仕様
+- 製品・用途:
+- 対象外:
+- PCB source/revision:
+- enclosure source/revision:
+- component/hardware drawings and revisions:
 
-### 機能要件
-- [ ] [要件1]
-- [ ] [要件2]
+## Assembly coordinate frame
 
-### 寸法・形状
-| 項目 | 値 | 公差 | 備考 |
-|------|-----|------|------|
-| 外形（全長） | mm | ±mm | |
-| 外形（全幅） | mm | ±mm | |
-| 外形（全高） | mm | ±mm | |
-| 肉厚 | mm | ±mm | |
+- 単位: mm
+- assembly origin:
+- +X / +Y / +Z:
+- PCB frame and transform to assembly:
+- enclosure datums:
 
-### 材質・表面処理
-- **想定材質**:
-- **表面処理**:
-- **色**:
+## System requirements
 
----
-
-## 回路設計仕様
-
-### 機能要件
-- [ ] [要件1]
-- [ ] [要件2]
-
-### 電気的仕様
-| 項目 | 最小 | 標準 | 最大 | 単位 |
-|------|------|------|------|------|
-| 入力電圧 | | | | V |
-| 出力電圧 | | | | V |
-| 消費電流 | | | | mA |
-
-### 使用部品
-- [ ] [主要IC/マイコン]
-- [ ] [センサー]
-- [ ] [コネクタ]
-
----
+| ID | 要求 | 条件・範囲 | 根拠/出典 | 検証 | 合格基準 |
+|---|---|---|---|---|---|
+| SYS-FUNC-001 | | | | | |
 
 ## 基板-筐体インターフェース
 
 ### 基板仕様
-| 項目 | 値 | 備考 |
-|------|-----|------|
-| 基板サイズ | W × H mm | |
-| 基板厚 | mm | 標準1.6mm |
-| 取付穴 | M × N箇所 | |
-| 取付穴位置 | (x, y), ... | 基板原点から |
+
+| 項目 | 値 | tolerance/limit | frame/datum | source/revision |
+|---|---|---|---|---|
+| 基板サイズ | W × D mm | | PCB frame | |
+| 基板厚 | mm | | PCB frame | |
+| 取付穴位置 | (x1, y1), (x2, y2), ... | | PCB frame | |
+| 最大部品高 | mm | | PCB top seating plane | |
+| 下面最大部品高 | mm | | PCB bottom plane | |
 
 ### 筐体仕様
-| 項目 | 値 | 備考 |
-|------|-----|------|
-| 内寸 | W × H × D mm | |
-| ボス位置 | (x, y), ... | 筐体中心から |
-| ボス高さ | mm | |
 
-### コネクタ・開口部
-| コネクタ | 基板位置 | 開口位置 | 開口サイズ |
-|---------|---------|---------|-----------|
-| USB-C | | | 10×4mm |
-| 電源 | | | |
+| 項目 | 値 | tolerance/limit | frame/datum | source/revision |
+|---|---|---|---|---|
+| 内寸 | W × D × H mm | | assembly frame | |
+| ボス位置 | (x1, y1), (x2, y2), ... | | assembly frame | |
+| ボス高さ | mm | | enclosure bottom datum | |
 
-### 部品高さ
-| 部品 | 高さ | 位置 |
-|------|------|------|
-| [最高部品] | mm | (x, y) |
+### Acceptance thresholds
 
----
+| 項目 | 値 | source/rationale |
+|---|---:|---|
+| 基板外周最小クリアランス | mm | |
+| 上面最小クリアランス | mm | |
+| 下面最小クリアランス | mm | |
+| 取付位置許容差 | mm | |
 
-## 干渉チェック
-- [ ] 基板と筐体内壁のクリアランス確認（各辺2mm以上）
-- [ ] コネクタ挿抜スペースの確認
-- [ ] 放熱経路の確保
-- [ ] 取付穴位置の一致確認
+### Interface control table
 
----
+| ID | interface | owner A | owner B | nominal | tolerance | required margin | verification |
+|---|---|---|---|---|---|---|---|
+| IF-MNT-001 | PCB hole to boss | EE | ME | | | | CAD + inspection |
 
-## 出力形式
+### Connectors, controls, and openings
 
-### 機械設計
-- [ ] STEP
-- [ ] STL
-- [ ] PNG
+| ID | item/MPN | PCB datum position | opening datum/size | plug/tool/cable envelope | tolerance | source/revision |
+|---|---|---|---|---|---|---|
+| IF-CON-001 | | | | | | |
 
-### 回路設計
-- [ ] BOM
-- [ ] ERC summary
-- [ ] 設計メモ
-- [ ] KiCad 回路図 / プロジェクト
-- [ ] ネットリスト（必要時のみ）
+### Component and keep-out envelopes
 
----
+| ID | item | side | bounding/envelope geometry | position/frame | tolerance | source/revision |
+|---|---|---|---|---|---|---|
+| IF-ENV-001 | highest component | top | | | | |
 
-## 承認
-- [ ] **仕様承認済み** - 承認後に以下のスキルを順に実行:
-  1. `mechanical-cad` - 筐体生成
-  2. `circuit-design` - 回路生成
-  3. `integration` - 整合性チェック
+## Thermal, EMC/ESD, ingress, and environment
+
+| ID | requirement/interface | conditions | acceptance | method | evidence |
+|---|---|---|---|---|---|
+| SYS-THERM-001 | | | | Analysis/Test | |
+| SYS-EMC-001 | | | | Inspection/Test | |
+| SYS-ING-001 | | | | Test | |
+
+## Assembly and service
+
+- assembly order:
+- fasteners/inserts and source:
+- tool/finger access:
+- cable routing and bend/service envelope:
+- rework/maintenance:
+
+## Deliverables
+
+- [ ] integrated specification and interface table
+- [ ] mechanical CadQuery/STEP and validation report
+- [ ] SKiDL/KiCad/BOM/ERC artifacts
+- [ ] text screening report
+- [ ] 3D interference/minimum-gap evidence
+- [ ] required thermal/EMC/ingress/test evidence
+
+## Assumptions, TBDs, and TBRs
+
+| ID | type | item | impact | owner | resolution | milestone |
+|---|---|---|---|---|---|---|
+| TBR-001 | TBR | | | | | |
+
+## Verification matrix
+
+| Requirement/Interface ID | method | setup/model | acceptance | evidence | result |
+|---|---|---|---|---|---|
+| IF-MNT-001 | Analysis/Inspection | | | | Not run |
+
+## Approval
+
+- [ ] Baseline approved by [name/role] on [date]
+- Approved exceptions/unresolved items:

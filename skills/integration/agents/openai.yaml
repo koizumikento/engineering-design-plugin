@@ -1,7 +1,4 @@
 interface:
-  display_name: "Integration Check"
-  short_description: "Check enclosure and PCB fit, clearances, connector alignment, and mounting consistency."
-  default_prompt: "Use this skill to validate an approved integrated specification and produce a board-to-enclosure compatibility report."
-
-policy:
-  allow_implicit_invocation: true
+  display_name: "PCB-Enclosure Integration"
+  short_description: "Check PCB, enclosure, mounting, access, and interfaces."
+  default_prompt: "Use $integration to validate the PCB-enclosure interfaces and produce an evidence-backed integration report."

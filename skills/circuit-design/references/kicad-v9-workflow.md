@@ -1,66 +1,73 @@
-# KiCad v9 Workflow Notes
+# KiCad 9 schematic workflow
 
-このリポジトリで KiCad v9 を主成果物として扱う際の実務メモ。
+## Source ownership
 
-## 基本方針
+- SKiDL Python: logical connectivity, hierarchy, parameterization.
+- generated `.kicad_sch` / `.kicad_pro`: human review and PCB handoff.
+- `.kicad_pcb`: layout/fabrication source when PCB work begins; this skill does not generate or certify layout.
 
-- 回路設計の標準成果物では、正本は `.kicad_sch` / `.kicad_pro` にする
-- `outputs/reports/` に BOM / ERC summary / design summary を集約し、`outputs/kicad/[project-name]/` に KiCad プロジェクト一式をまとめる
-- 見た目確認のために別ソースの図を作るのではなく、KiCad ネイティブ出力を直接検証する
+Generated KiCad filesを手編集する場合は、SKiDLへ戻す方法またはKiCadを以後の正本に切り替える決定を記録する。二重編集を放置しない。
 
-## SKiDL 側の方針
+## Generation paths
 
-- KiCad が利用可能な環境では、可能な限り KiCad 標準ライブラリを直接使う
-  - 例: `Part("Amplifier_Operational", "TL072")`
-  - 例: `Part("Device", "R")`, `Part("Device", "C")`
-- 部品には `tag=` を付ける
-  - ランダムタグ生成 warning を減らせる
-- 外部入出力ネットは未モデルのまま放置しない
-  - 少なくとも `net.drive = Pin.drives.PASSIVE` を検討する
-  - 実回路に近づけるならコネクタやテストポイントとして明示する
-  - 可能なら `VIN` / `VOUT` のような境界ネットは 1 ピンコネクタやテストポイントを置き、KiCad 図でも同じ要素を描く
+### Native SKiDL
 
-## KiCad ライブラリ環境
+SKiDL 2.2は `generate_schematic()` でKiCad schematicを生成できる。一般回路では第一候補とし、生成後の可読性とKiCad ERCを確認する。
 
-- `scripts/kicad_env.py` で以下を自動設定する
-  - `KICAD_SYMBOL_DIR`
-  - `KICAD6_SYMBOL_DIR` ... `KICAD9_SYMBOL_DIR`
-  - `KICAD_FOOTPRINT_DIR`
-  - `KICAD6_FOOTPRINT_DIR` ... `KICAD9_FOOTPRINT_DIR`
-- KiCad グローバルテーブルが無い環境では、テンプレートから以下を自動初期化する
-  - `~/.config/kicad/fp-lib-table`
-  - `~/.config/kicad/6.0/fp-lib-table` ... `~/.config/kicad/9.0/fp-lib-table`
-  - `sym-lib-table` も同様
-- `scripts/skidl_utils.py` の共通ローダを使い、importlib 経由で読んだ SKiDL スクリプトの root hierarchy node warning を抑える
-  - root node は空 hierarchy のまま維持し、`check_tags()` だけを安定名ベースで扱う
+### Repository exporter
 
-## 回路図表現
-
-- マルチユニット部品は KiCad の標準的な分割表現に従う
-  - 例: TL072 は `U1A`, `U1B`, `U1C(power)`
-- 信号経路を優先して配置し、電源ユニットとデカップリングは別ブロックに分離する
-- 未使用ユニットは図上で終端方法が分かるように残す
-- 外部 I/O は「ラベルだけある線」よりも、入出力部品として配置した方が ERC と可読性が安定する
-
-## Exporter の方針
-
-- `scripts/kicad_sch_export.py` はサポート済みトポロジーを `.kicad_sch` に落とす
-- 未対応回路が来たら stopgap の補助図を増やすのではなく、exporter を拡張する
-- 追加したトポロジーは、このメモか `SKILL.md` に検証手順と制約を書く
-
-## 最低限の検証
+`skills/circuit-design/scripts/kicad_sch_export.py` はリポジトリで確認済みのtopology向け互換pathである。未対応回路を「出力済み」とみなさない。必要ならnative SKiDLを試し、それでも不足する場合はexporter変更と回帰例を同時に追加する。
 
 ```bash
-uv run python -m py_compile input.py
-uv run python scripts/skidl_runner.py input.py -o outputs/
-uv run python scripts/kicad_sch_export.py input.py -o outputs/
-kicad-cli sch export netlist outputs/kicad/[project-name]/[project-name].kicad_sch -o outputs/reports/
+uv run python skills/circuit-design/scripts/kicad_sch_export.py input.py -o outputs/
 ```
 
-確認項目:
+## Independent KiCad checks
 
-- ERC エラーが 0
-- `outputs/reports/` に `-bom.csv`, `-erc-summary.md`, `-design-summary.md` が生成される
-- `outputs/kicad/[project-name]/` に `.kicad_sch`, `.kicad_pro` が生成される
-- `kicad-cli` が `outputs/kicad/[project-name]/[project-name].kicad_sch` を読める
-- 外部 I/O がある場合、回路モデルと KiCad 図の両方に同じ境界要素が存在する
+KiCad 9 CLIはschematic ERCとBOM exportを直接提供する。
+
+```bash
+kicad-cli sch erc \
+  --exit-code-violations \
+  --format json \
+  -o outputs/reports/project-kicad-erc.json \
+  outputs/kicad/project/project.kicad_sch
+
+kicad-cli sch export bom \
+  -o outputs/reports/project-kicad-bom.csv \
+  outputs/kicad/project/project.kicad_sch
+```
+
+Windows PowerShellでは行継続を使わず1行で実行してよい。
+
+KiCadの通常のschematic-to-PCB flowはlegacy netlist fileを必要としない。netlist exportは外部toolや明示的検証用途に限定する。
+
+## Visual review
+
+- left-to-right signal flow and named interfaces
+- rails, grounds, power flags, decoupling
+- multi-unit parts and hidden/power units
+- unused pins/units and no-connect markers
+- connector pin order and polarity
+- part value, MPN, footprint, DNP/variant fields
+- net labels versus actual connectivity
+- overlapping wires, dangling stubs, unreadable auto-placement
+
+KiCadがfileをparseできても、読みやすさやpinout妥当性は保証されない。
+
+## Handoff gate
+
+- SKiDL ERC結果を保存
+- KiCad CLI ERCをviolationsで非0終了させる
+- BOMをSKiDL側とKiCad側で比較
+- schematicをGUIまたはrenderで視覚確認
+- symbol/footprint/MPNをdatasheetと照合
+- external I/Oとpower boundaryをreview
+- unresolved warningとexception rationaleをreport
+
+## Official sources
+
+- [KiCad 9 Command-Line Interface](https://docs.kicad.org/9.0/en/cli/cli.html)
+- [KiCad 9 Introduction](https://docs.kicad.org/9.0/en/introduction/introduction.html)
+- [KiCad 9 Schematic Editor](https://docs.kicad.org/9.0/en/eeschema/eeschema.html)
+- [SKiDL KiCad schematic generation](https://devbisme.github.io/skidl/#kicad-schematics)
