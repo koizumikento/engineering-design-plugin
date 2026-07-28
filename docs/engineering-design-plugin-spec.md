@@ -66,6 +66,7 @@ Required structure:
 Input:
 
 - approved spec or internal CAD brief
+- prose, reference images, and dimensioned technical drawings
 - mating-part source geometry/drawings
 - manufacturing and output requirements
 
@@ -85,6 +86,13 @@ uv run python scripts/preview_generator.py outputs/input.step -o outputs/ --all-
 ```
 
 Shape validity, dimensions, topology, visible geometry, assembly transform, tolerance stack, and process-specific constraints are separate checks. build123d joints resolve source placement; exported STEP is not assumed to preserve a live constraint.
+
+Before implementation, consolidate inputs, source precedence, coordinate
+conventions, assumptions, conflicts, and validation targets into an internal
+CAD brief. After visible changes, inspect a STEP-derived preview. Visual
+findings remain diagnostic until supported by runner expectations or an
+independent measurement. Repair the smallest responsible source section and
+rerun failed and dependent checks.
 
 ### `circuit-design`
 
