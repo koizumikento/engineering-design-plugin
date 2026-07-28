@@ -1,5 +1,7 @@
 # Engineering Design Agent Skills
 
+[![CI](https://github.com/koizumikento/engineering-design-plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/koizumikento/engineering-design-plugin/actions/workflows/ci.yml)
+
 自然言語の要望を、検証可能な仕様、build123d機械モデル、SKiDL/KiCad回路、PCB・筐体統合チェックへつなぐCodex向けスキル集です。
 
 `skills/` が唯一の運用正本です。各 `SKILL.md` は中核ワークフロー、`references/` は必要時だけ読む技術資料、`agents/openai.yaml` はUIメタデータを保持します。
@@ -52,6 +54,8 @@ repo-local marketplaceは `.agents/plugins/marketplace.json` です。entryは `
 - source of truth: `skills/`
 
 Plugin Directoryで `Engineering Design` をinstallまたは再installし、新しいtaskで更新後のskillsを試してください。
+
+Plugin release versionは2.0.0です。Python helper projectの0.3.0とは役割が異なり、`scripts/validate_release.py`がmanifest、marketplace、skill source-of-truthをまとめて検証します。
 
 ## Workflow
 
@@ -160,6 +164,16 @@ Examplesは教育・回帰用であり、部品値、開口、IP表現、製造�
 - `docs/decisions/STR-232-assembly-routing.md`: superseded用途別routing decision
 
 STR-228/STR-231のPoCは過去の比較evidenceとしてproduction workflowから隔離したまま保持します。productionはrootのbuild123d runtimeと`scripts/cad_runner.py`だけを使用します。
+
+## Validation and release gate
+
+PRと`main` pushでは、read-onlyのGitHub Actionsがlocked Python 3.11環境、plugin metadata、skill構造、production CAD regression、STEP再import、preview smoke testを検証します。ローカルでは同じgateを次の順に実行します。
+
+```bash
+uv sync --frozen
+uv run python scripts/validate_release.py
+uv run python -m unittest discover -s tests
+```
 
 ## References
 

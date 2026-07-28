@@ -173,10 +173,17 @@ Plugin metadata is presentation/install information only. Operational instructio
 
 For every skill change:
 
-1. validate all skill folders with `quick_validate.py`;
-2. check reference links and repository-relative paths;
-3. compile changed Python scripts;
-4. execute affected helper entrypoints against representative examples;
-5. inspect generated reports/artifacts;
-6. verify plugin manifest and marketplace JSON structure;
+1. run `uv sync --frozen`;
+2. run `uv run python scripts/validate_release.py`;
+3. run `uv run python -m unittest discover -s tests`;
+4. compile changed Python scripts;
+5. execute affected helper entrypoints against representative examples;
+6. inspect generated reports/artifacts;
 7. review `git diff` for unintended copied workflow logic.
+
+The repository-local release validator is the CI source of truth for all four
+skill folders, relative Markdown links, plugin 2.0.0 manifests, marketplace
+sources, and the absence of duplicated skill directories. It does not depend
+on a local Codex installation. GitHub Actions uses only `contents: read`,
+installs the frozen Python 3.11 environment, and runs the same validator and
+unit-test suite on pull requests and pushes to `main`.
