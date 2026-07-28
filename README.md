@@ -78,6 +78,8 @@ uv run python scripts/cad_runner.py input.py -o outputs/ --report --fail-on-chec
 
 単一部品とアセンブリの両方でbuild123d Pythonをparameterized design definition、STEPをneutral geometry exchange、STL/3MF/DXF/SVG/PNGを用途別の派生成果物として扱います。runnerはSTEPを再importし、BREP、部品label、resolved transform、source-defined expectationを検証します。validityは寸法、干渉、強度、工程適合を自動保証しません。
 
+実装前にprose・画像・技術図面を短いCAD briefへ統合し、dimensioned sourceを画像比率より優先します。visible geometryを作成・変更した場合はSTEP previewを確認し、視覚的な懸念を`cad_expectations`または独立計測へ戻します。失敗時は原因を分類し、最小のsource修正後に依存checkまで再実行します。
+
 ```bash
 uv run python scripts/preview_generator.py outputs/input.step -o outputs/ --all-views
 ```
