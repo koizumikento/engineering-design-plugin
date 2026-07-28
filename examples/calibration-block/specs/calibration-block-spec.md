@@ -2,7 +2,7 @@
 
 ## 目的
 
-CadQuery runner のSTEP-first出力、検査レポート、複数視点プレビューを確認するための小型校正ブロック。
+build123d runner のSTEP-first出力、検査レポート、複数視点プレビューを確認するための小型校正ブロック。
 
 ## 寸法
 

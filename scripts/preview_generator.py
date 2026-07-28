@@ -17,37 +17,43 @@ import tempfile
 
 def load_step_file(step_path: Path):
     """STEPファイルを読み込み"""
-    import cadquery as cq
+    from build123d import import_step
 
-    result = cq.importers.importStep(str(step_path))
-    return result
+    return import_step(step_path)
 
 
 def load_stl_file(stl_path: Path):
     """STLファイルを読み込み"""
-    import cadquery as cq
+    from build123d import import_stl
 
-    result = cq.importers.importStl(str(stl_path))
-    return result
+    return import_stl(stl_path)
 
 
-def load_cadquery_script(script_path: Path):
-    """CadQueryスクリプトを実行して結果を取得"""
+def load_build123d_script(script_path: Path):
+    """build123dスクリプトを実行してShapeを取得"""
     import importlib.util
+    from build123d import BuildPart, Shape
 
-    spec = importlib.util.spec_from_file_location("cq_script", script_path)
+    spec = importlib.util.spec_from_file_location("build123d_script", script_path)
     if spec is None or spec.loader is None:
         raise ImportError(f"Cannot load script: {script_path}")
 
     module = importlib.util.module_from_spec(spec)
-    sys.modules["cq_script"] = module
+    sys.modules["build123d_script"] = module
 
     spec.loader.exec_module(module)
 
     # 結果を探す
     for name in ['result', 'model', 'shape', 'part', 'assembly']:
         if hasattr(module, name):
-            return getattr(module, name)
+            result = getattr(module, name)
+            if isinstance(result, BuildPart):
+                result = result.part
+            if not isinstance(result, Shape):
+                raise TypeError(
+                    f"Unsupported build123d result type: {type(result).__name__}"
+                )
+            return result
 
     raise ValueError("Script does not contain 'result', 'model', 'shape', 'part', or 'assembly'")
 
@@ -69,8 +75,7 @@ def get_view_parameters(view: str) -> Tuple[float, float]:
 def render_with_matplotlib(result, output_path: Path, view: str = "iso",
                           width: int = 1024, height: int = 768) -> str:
     """matplotlibを使用してレンダリング"""
-    import cadquery as cq
-    from cadquery import exporters
+    from build123d import export_stl
     import numpy as np
     import matplotlib.pyplot as plt
     from mpl_toolkits import mplot3d
@@ -79,7 +84,7 @@ def render_with_matplotlib(result, output_path: Path, view: str = "iso",
     with tempfile.NamedTemporaryFile(suffix='.stl', delete=False) as tmp:
         tmp_path = tmp.name
 
-    exporters.export(result, tmp_path)
+    export_stl(result, tmp_path, tolerance=0.05, angular_tolerance=0.1)
 
     try:
         from stl import mesh
@@ -139,15 +144,14 @@ def render_with_vtk(result, output_path: Path, view: str = "iso",
     try:
         import vtk
         from vtkmodules.util import numpy_support
-        import cadquery as cq
-        from cadquery import exporters
+        from build123d import export_stl
         import numpy as np
 
         # 一時STLファイル作成
         with tempfile.NamedTemporaryFile(suffix='.stl', delete=False) as tmp:
             tmp_path = tmp.name
 
-        exporters.export(result, tmp_path)
+        export_stl(result, tmp_path, tolerance=0.05, angular_tolerance=0.1)
 
         try:
             # STL読み込み
@@ -266,11 +270,11 @@ def main():
     }
 
     try:
-        # CadQueryインポート確認
+        # build123dインポート確認
         try:
-            import cadquery as cq
+            import build123d
         except ImportError:
-            print("Error: CadQuery is not installed. Run: uv sync", file=sys.stderr)
+            print("Error: build123d is not installed. Run: uv sync", file=sys.stderr)
             sys.exit(1)
 
         # ファイル読み込み
@@ -282,7 +286,7 @@ def main():
         elif suffix == '.stl':
             result = load_stl_file(args.input)
         elif suffix == '.py':
-            result = load_cadquery_script(args.input)
+            result = load_build123d_script(args.input)
         else:
             print(f"Error: Unsupported file format: {suffix}", file=sys.stderr)
             sys.exit(1)

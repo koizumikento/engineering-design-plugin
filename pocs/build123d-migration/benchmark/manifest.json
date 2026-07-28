@@ -1,0 +1,438 @@
+{
+  "version": 1,
+  "issue": "STR-231",
+  "engines": [
+    "cadquery",
+    "build123d"
+  ],
+  "expected_spec_count": 10,
+  "trials_per_engine": 3,
+  "defaults": {
+    "bbox_tolerance_mm": 0.05,
+    "cylinder_tolerance_mm": 0.05,
+    "point_probe_tolerance_mm": 0.000001
+  },
+  "prompt_controls": {
+    "agent": "Codex subagent with inherited model",
+    "exact_model_build": "NOT_EVALUATED: host does not expose an exact build identifier",
+    "token_usage": "NOT_EVALUATED: collaboration API does not expose per-agent token usage",
+    "source_edits_before_first_evaluation": 0,
+    "maximum_repair_rounds": 2,
+    "ordering": "interleaved by case, trial, then engine",
+    "allowed_inputs": [
+      "benchmark/CONTRACT.md",
+      "the assigned specification Markdown",
+      "the assigned engine name",
+      "the assigned engine guide",
+      "benchmark/TRIAL_TASK.md"
+    ]
+  },
+  "specs": {
+    "calibration-block": {
+      "category": "prismatic-feature-stack",
+      "spec_file": "specs/calibration-block.md",
+      "requirement_ids": ["R1", "R2", "R3", "R4", "R5"],
+      "requirement_coverage": {
+        "R1": ["bbox", "volume", "material probes"],
+        "R2": ["fillet cylinders", "corner probes", "volume"],
+        "R3": ["hole cylinders", "hole probes", "volume"],
+        "R4": ["pocket probes", "volume"],
+        "R5": ["volume", "outside probes"]
+      },
+      "expected_bbox_mm": {
+        "min": [-25.0, -20.0, 0.0],
+        "max": [25.0, 20.0, 20.0]
+      },
+      "expected_solids": 1,
+      "volume_range_mm3": [37314.19, 37315.19],
+      "required_cylinders": [
+        {"kind": "internal", "axis": "z", "radius_mm": 2.5, "anchor_mm": [-15.0, -10.0], "span_mm": [0.0, 20.0]},
+        {"kind": "internal", "axis": "z", "radius_mm": 2.5, "anchor_mm": [-15.0, 10.0], "span_mm": [0.0, 20.0]},
+        {"kind": "internal", "axis": "z", "radius_mm": 2.5, "anchor_mm": [15.0, -10.0], "span_mm": [0.0, 20.0]},
+        {"kind": "internal", "axis": "z", "radius_mm": 2.5, "anchor_mm": [15.0, 10.0], "span_mm": [0.0, 20.0]},
+        {"kind": "external", "axis": "z", "radius_mm": 3.0, "anchor_mm": [-22.0, -17.0], "span_mm": [0.0, 20.0]},
+        {"kind": "external", "axis": "z", "radius_mm": 3.0, "anchor_mm": [-22.0, 17.0], "span_mm": [0.0, 20.0]},
+        {"kind": "external", "axis": "z", "radius_mm": 3.0, "anchor_mm": [22.0, -17.0], "span_mm": [0.0, 20.0]},
+        {"kind": "external", "axis": "z", "radius_mm": 3.0, "anchor_mm": [22.0, 17.0], "span_mm": [0.0, 20.0]}
+      ],
+      "point_probes": [
+        {"point": [0.0, 0.0, 10.0], "inside": true},
+        {"point": [24.0, 18.0, 10.0], "inside": true},
+        {"point": [0.0, 0.0, 15.0], "inside": true},
+        {"point": [15.0, 10.0, 10.0], "inside": false},
+        {"point": [0.0, 0.0, 18.0], "inside": false},
+        {"point": [24.5, 19.5, 10.0], "inside": false},
+        {"point": [26.0, 0.0, 10.0], "inside": false}
+      ]
+    },
+    "bracket": {
+      "category": "orthogonal-bracket",
+      "spec_file": "specs/bracket.md",
+      "requirement_ids": ["R1", "R2", "R3", "R4", "R5", "R6", "R7"],
+      "requirement_coverage": {
+        "R1": ["bbox", "volume", "foot probe"],
+        "R2": ["bbox", "plate probe"],
+        "R3": ["Z-hole cylinders and probes"],
+        "R4": ["Y-hole cylinders and probes"],
+        "R5": ["fillet cylinder segments", "fillet probes", "volume"],
+        "R6": ["rib probes", "volume"],
+        "R7": ["volume", "void probes"]
+      },
+      "expected_bbox_mm": {
+        "min": [-30.0, -20.0, 0.0],
+        "max": [30.0, 20.0, 48.0]
+      },
+      "expected_solids": 1,
+      "volume_range_mm3": [37760.28, 37761.28],
+      "required_cylinders": [
+        {"kind": "internal", "axis": "z", "radius_mm": 3.0, "anchor_mm": [-20.0, -5.0], "span_mm": [0.0, 8.0]},
+        {"kind": "internal", "axis": "z", "radius_mm": 3.0, "anchor_mm": [20.0, -5.0], "span_mm": [0.0, 8.0]},
+        {"kind": "internal", "axis": "y", "radius_mm": 4.0, "anchor_mm": [-18.0, 28.0], "span_mm": [12.0, 20.0]},
+        {"kind": "internal", "axis": "y", "radius_mm": 4.0, "anchor_mm": [18.0, 28.0], "span_mm": [12.0, 20.0]},
+        {"axis": "x", "radius_mm": 4.0, "anchor_mm": [8.0, 12.0], "span_mm": [-30.0, -3.0]},
+        {"axis": "x", "radius_mm": 4.0, "anchor_mm": [8.0, 12.0], "span_mm": [3.0, 30.0]}
+      ],
+      "point_probes": [
+        {"point": [0.0, 0.0, 4.0], "inside": true},
+        {"point": [0.0, 16.0, 28.0], "inside": true},
+        {"point": [0.0, 10.0, 9.0], "inside": true},
+        {"point": [0.0, 6.0, 10.0], "inside": true},
+        {"point": [0.0, 0.0, 28.0], "inside": false},
+        {"point": [-20.0, -5.0, 4.0], "inside": false},
+        {"point": [-18.0, 16.0, 28.0], "inside": false},
+        {"point": [10.0, 6.0, 10.0], "inside": false}
+      ]
+    },
+    "pcb-enclosure": {
+      "category": "open-enclosure",
+      "spec_file": "specs/pcb-enclosure.md",
+      "requirement_ids": ["R1", "R2", "R3", "R4", "R5"],
+      "requirement_coverage": {
+        "R1": ["bbox", "volume"],
+        "R2": ["cavity and wall probes", "volume"],
+        "R3": ["boss cylinders and probes"],
+        "R4": ["boss-hole cylinders and probes"],
+        "R5": ["solid count", "volume", "outside probe"]
+      },
+      "expected_bbox_mm": {
+        "min": [-50.0, -35.0, 0.0],
+        "max": [50.0, 35.0, 30.0]
+      },
+      "expected_solids": 1,
+      "volume_range_mm3": [56943.40, 56944.40],
+      "required_cylinders": [
+        {"kind": "external", "axis": "z", "radius_mm": 4.0, "anchor_mm": [-38.0, -23.0], "span_mm": [3.0, 9.0]},
+        {"kind": "external", "axis": "z", "radius_mm": 4.0, "anchor_mm": [-38.0, 23.0], "span_mm": [3.0, 9.0]},
+        {"kind": "external", "axis": "z", "radius_mm": 4.0, "anchor_mm": [38.0, -23.0], "span_mm": [3.0, 9.0]},
+        {"kind": "external", "axis": "z", "radius_mm": 4.0, "anchor_mm": [38.0, 23.0], "span_mm": [3.0, 9.0]},
+        {"kind": "internal", "axis": "z", "radius_mm": 1.5, "anchor_mm": [-38.0, -23.0], "span_mm": [0.0, 9.0]},
+        {"kind": "internal", "axis": "z", "radius_mm": 1.5, "anchor_mm": [-38.0, 23.0], "span_mm": [0.0, 9.0]},
+        {"kind": "internal", "axis": "z", "radius_mm": 1.5, "anchor_mm": [38.0, -23.0], "span_mm": [0.0, 9.0]},
+        {"kind": "internal", "axis": "z", "radius_mm": 1.5, "anchor_mm": [38.0, 23.0], "span_mm": [0.0, 9.0]}
+      ],
+      "point_probes": [
+        {"point": [0.0, 0.0, 1.5], "inside": true},
+        {"point": [48.0, 0.0, 15.0], "inside": true},
+        {"point": [41.0, 23.0, 6.0], "inside": true},
+        {"point": [0.0, 0.0, 15.0], "inside": false},
+        {"point": [38.0, 23.0, 6.0], "inside": false},
+        {"point": [0.0, 0.0, 31.0], "inside": false}
+      ]
+    },
+    "sensor-enclosure": {
+      "category": "multi-part-enclosure",
+      "spec_file": "specs/sensor-enclosure.md",
+      "requirement_ids": ["R1", "R2", "R3", "R4", "R5", "R6", "R7"],
+      "requirement_coverage": {
+        "R1": ["body bbox and probes"],
+        "R2": ["cavity probes", "body volume"],
+        "R3": ["side-port cylinder and probes"],
+        "R4": ["slot cylinders and probes"],
+        "R5": ["lid bbox and assembly gap probe"],
+        "R6": ["through/counterbore cylinders and probes"],
+        "R7": ["solid count", "total and per-solid volume"]
+      },
+      "expected_bbox_mm": {
+        "min": [-35.0, -25.0, 0.0],
+        "max": [35.0, 25.0, 38.0]
+      },
+      "expected_solids": 2,
+      "volume_range_mm3": [50029.09, 50031.09],
+      "expected_solid_bboxes": [
+        {
+          "bbox": {"min": [-35.0, -25.0, 0.0], "max": [35.0, 25.0, 30.0]},
+          "volume_range_mm3": [36532.24, 36533.24]
+        },
+        {
+          "bbox": {"min": [-35.0, -25.0, 34.0], "max": [35.0, 25.0, 38.0]},
+          "volume_range_mm3": [13496.85, 13497.85]
+        }
+      ],
+      "required_cylinders": [
+        {"kind": "internal", "axis": "x", "radius_mm": 5.0, "anchor_mm": [0.0, 15.0], "span_mm": [-35.0, -31.0]},
+        {"kind": "internal", "axis": "z", "radius_mm": 3.0, "anchor_mm": [-7.0, 10.0], "span_mm": [0.0, 4.0]},
+        {"kind": "internal", "axis": "z", "radius_mm": 3.0, "anchor_mm": [7.0, 10.0], "span_mm": [0.0, 4.0]},
+        {"kind": "internal", "axis": "z", "radius_mm": 2.0, "anchor_mm": [-25.0, -15.0], "span_mm": [34.0, 36.0]},
+        {"kind": "internal", "axis": "z", "radius_mm": 2.0, "anchor_mm": [-25.0, 15.0], "span_mm": [34.0, 36.0]},
+        {"kind": "internal", "axis": "z", "radius_mm": 2.0, "anchor_mm": [25.0, -15.0], "span_mm": [34.0, 36.0]},
+        {"kind": "internal", "axis": "z", "radius_mm": 2.0, "anchor_mm": [25.0, 15.0], "span_mm": [34.0, 36.0]},
+        {"kind": "internal", "axis": "z", "radius_mm": 4.0, "anchor_mm": [-25.0, -15.0], "span_mm": [36.0, 38.0]},
+        {"kind": "internal", "axis": "z", "radius_mm": 4.0, "anchor_mm": [-25.0, 15.0], "span_mm": [36.0, 38.0]},
+        {"kind": "internal", "axis": "z", "radius_mm": 4.0, "anchor_mm": [25.0, -15.0], "span_mm": [36.0, 38.0]},
+        {"kind": "internal", "axis": "z", "radius_mm": 4.0, "anchor_mm": [25.0, 15.0], "span_mm": [36.0, 38.0]}
+      ],
+      "point_probes": [
+        {"point": [0.0, 0.0, 2.0], "inside": true},
+        {"point": [33.0, 10.0, 15.0], "inside": true},
+        {"point": [0.0, 0.0, 36.0], "inside": true},
+        {"point": [28.0, 15.0, 35.0], "inside": true},
+        {"point": [0.0, 0.0, 15.0], "inside": false},
+        {"point": [-33.0, 0.0, 15.0], "inside": false},
+        {"point": [0.0, 10.0, 2.0], "inside": false},
+        {"point": [7.0, 10.0, 2.0], "inside": false},
+        {"point": [25.0, 15.0, 35.0], "inside": false},
+        {"point": [25.0, 15.0, 37.0], "inside": false},
+        {"point": [0.0, 0.0, 32.0], "inside": false}
+      ]
+    },
+    "flange": {
+      "category": "axisymmetric-with-pattern",
+      "spec_file": "specs/flange.md",
+      "requirement_ids": ["R1", "R2", "R3", "R4", "R5", "R6"],
+      "requirement_coverage": {
+        "R1": ["bbox", "outer cylinder", "volume"],
+        "R2": ["bore cylinder and probe"],
+        "R3": ["bolt cylinders and probes"],
+        "R4": ["outer-cylinder span", "chamfer probes", "volume"],
+        "R5": ["bore span", "volume"],
+        "R6": ["volume and outside probes"]
+      },
+      "expected_bbox_mm": {
+        "min": [-40.0, -40.0, 0.0],
+        "max": [40.0, 40.0, 12.0]
+      },
+      "expected_solids": 1,
+      "volume_range_mm3": [47674.22, 47675.22],
+      "required_cylinders": [
+        {"kind": "external", "axis": "z", "radius_mm": 40.0, "anchor_mm": [0.0, 0.0], "span_mm": [0.0, 10.0]},
+        {"kind": "internal", "axis": "z", "radius_mm": 15.0, "anchor_mm": [0.0, 0.0], "span_mm": [1.0, 12.0]},
+        {"kind": "internal", "axis": "z", "radius_mm": 4.0, "anchor_mm": [30.0, 0.0], "span_mm": [0.0, 12.0]},
+        {"kind": "internal", "axis": "z", "radius_mm": 4.0, "anchor_mm": [15.0, 25.980762], "span_mm": [0.0, 12.0]},
+        {"kind": "internal", "axis": "z", "radius_mm": 4.0, "anchor_mm": [-15.0, 25.980762], "span_mm": [0.0, 12.0]},
+        {"kind": "internal", "axis": "z", "radius_mm": 4.0, "anchor_mm": [-30.0, 0.0], "span_mm": [0.0, 12.0]},
+        {"kind": "internal", "axis": "z", "radius_mm": 4.0, "anchor_mm": [-15.0, -25.980762], "span_mm": [0.0, 12.0]},
+        {"kind": "internal", "axis": "z", "radius_mm": 4.0, "anchor_mm": [15.0, -25.980762], "span_mm": [0.0, 12.0]}
+      ],
+      "point_probes": [
+        {"point": [35.0, 0.0, 6.0], "inside": true},
+        {"point": [0.0, 22.0, 6.0], "inside": true},
+        {"point": [38.0, 0.0, 11.5], "inside": true},
+        {"point": [0.0, 0.0, 6.0], "inside": false},
+        {"point": [30.0, 0.0, 6.0], "inside": false},
+        {"point": [39.5, 0.0, 11.5], "inside": false},
+        {"point": [41.0, 0.0, 6.0], "inside": false}
+      ]
+    },
+    "stepped-shaft": {
+      "category": "turned-part",
+      "spec_file": "specs/stepped-shaft.md",
+      "requirement_ids": ["R1", "R2", "R3", "R4", "R5", "R6", "R7"],
+      "requirement_coverage": {
+        "R1": ["bbox", "lower cylinder and probes"],
+        "R2": ["middle cylinder and probes"],
+        "R3": ["upper cylinder and probes"],
+        "R4": ["bore cylinder and probes"],
+        "R5": ["keyway probes", "volume"],
+        "R6": ["upper-cylinder span", "chamfer probes", "volume"],
+        "R7": ["volume and outside probes"]
+      },
+      "expected_bbox_mm": {
+        "min": [-18.0, -18.0, 0.0],
+        "max": [18.0, 18.0, 62.0]
+      },
+      "expected_solids": 1,
+      "volume_range_mm3": [27650.50, 27651.50],
+      "required_cylinders": [
+        {"kind": "external", "axis": "z", "radius_mm": 18.0, "anchor_mm": [0.0, 0.0], "span_mm": [0.0, 12.0]},
+        {"kind": "external", "axis": "z", "radius_mm": 12.0, "anchor_mm": [0.0, 0.0], "span_mm": [12.0, 42.0]},
+        {"kind": "external", "axis": "z", "radius_mm": 8.0, "anchor_mm": [0.0, 0.0], "span_mm": [42.0, 61.0]},
+        {"kind": "internal", "axis": "z", "radius_mm": 3.0, "anchor_mm": [0.0, 0.0], "span_mm": [0.0, 62.0]}
+      ],
+      "point_probes": [
+        {"point": [10.0, 0.0, 6.0], "inside": true},
+        {"point": [10.0, 0.0, 30.0], "inside": true},
+        {"point": [6.0, 0.0, 50.0], "inside": true},
+        {"point": [0.0, 8.0, 30.0], "inside": true},
+        {"point": [7.0, 0.0, 61.5], "inside": true},
+        {"point": [0.0, 0.0, 6.0], "inside": false},
+        {"point": [0.0, 10.0, 30.0], "inside": false},
+        {"point": [15.0, 0.0, 30.0], "inside": false},
+        {"point": [9.0, 0.0, 50.0], "inside": false},
+        {"point": [7.7, 0.0, 61.5], "inside": false},
+        {"point": [0.0, 0.0, 63.0], "inside": false}
+      ]
+    },
+    "clevis": {
+      "category": "symmetric-fork",
+      "spec_file": "specs/clevis.md",
+      "requirement_ids": ["R1", "R2", "R3", "R4", "R5", "R6"],
+      "requirement_coverage": {
+        "R1": ["bbox", "base probe", "volume"],
+        "R2": ["left-arm probes"],
+        "R3": ["right-arm probes"],
+        "R4": ["solid count", "gap probe"],
+        "R5": ["Y-hole cylinders and probes"],
+        "R6": ["volume and outside probe"]
+      },
+      "expected_bbox_mm": {
+        "min": [-25.0, -15.0, 0.0],
+        "max": [25.0, 15.0, 50.0]
+      },
+      "expected_solids": 1,
+      "volume_range_mm3": [35983.57, 35984.57],
+      "required_cylinders": [
+        {"kind": "internal", "axis": "y", "radius_mm": 4.0, "anchor_mm": [-20.0, 38.0], "span_mm": [-15.0, 15.0]},
+        {"kind": "internal", "axis": "y", "radius_mm": 4.0, "anchor_mm": [20.0, 38.0], "span_mm": [-15.0, 15.0]}
+      ],
+      "point_probes": [
+        {"point": [0.0, 0.0, 5.0], "inside": true},
+        {"point": [-20.0, 0.0, 20.0], "inside": true},
+        {"point": [20.0, 0.0, 20.0], "inside": true},
+        {"point": [-15.5, 0.0, 38.0], "inside": true},
+        {"point": [15.5, 0.0, 38.0], "inside": true},
+        {"point": [0.0, 0.0, 30.0], "inside": false},
+        {"point": [-20.0, 0.0, 38.0], "inside": false},
+        {"point": [26.0, 0.0, 5.0], "inside": false}
+      ]
+    },
+    "open-enclosure": {
+      "category": "open-enclosure",
+      "spec_file": "specs/open-enclosure.md",
+      "requirement_ids": ["R1", "R2", "R3", "R4", "R5"],
+      "requirement_coverage": {
+        "R1": ["bbox", "volume"],
+        "R2": ["cavity/wall/floor probes", "volume"],
+        "R3": ["standoff cylinders and probes"],
+        "R4": ["blind-hole cylinders and depth probes"],
+        "R5": ["solid count", "outside probe"]
+      },
+      "expected_bbox_mm": {
+        "min": [-40.0, -25.0, 0.0],
+        "max": [40.0, 25.0, 30.0]
+      },
+      "expected_solids": 1,
+      "volume_range_mm3": [33727.41, 33728.41],
+      "required_cylinders": [
+        {"kind": "external", "axis": "z", "radius_mm": 4.0, "anchor_mm": [-28.0, -13.0], "span_mm": [3.0, 12.0]},
+        {"kind": "external", "axis": "z", "radius_mm": 4.0, "anchor_mm": [-28.0, 13.0], "span_mm": [3.0, 12.0]},
+        {"kind": "external", "axis": "z", "radius_mm": 4.0, "anchor_mm": [28.0, -13.0], "span_mm": [3.0, 12.0]},
+        {"kind": "external", "axis": "z", "radius_mm": 4.0, "anchor_mm": [28.0, 13.0], "span_mm": [3.0, 12.0]},
+        {"kind": "internal", "axis": "z", "radius_mm": 1.5, "anchor_mm": [-28.0, -13.0], "span_mm": [6.0, 12.0]},
+        {"kind": "internal", "axis": "z", "radius_mm": 1.5, "anchor_mm": [-28.0, 13.0], "span_mm": [6.0, 12.0]},
+        {"kind": "internal", "axis": "z", "radius_mm": 1.5, "anchor_mm": [28.0, -13.0], "span_mm": [6.0, 12.0]},
+        {"kind": "internal", "axis": "z", "radius_mm": 1.5, "anchor_mm": [28.0, 13.0], "span_mm": [6.0, 12.0]}
+      ],
+      "point_probes": [
+        {"point": [0.0, 0.0, 1.5], "inside": true},
+        {"point": [38.5, 0.0, 15.0], "inside": true},
+        {"point": [0.0, 23.5, 15.0], "inside": true},
+        {"point": [31.0, 13.0, 9.0], "inside": true},
+        {"point": [28.0, 13.0, 4.5], "inside": true},
+        {"point": [0.0, 0.0, 15.0], "inside": false},
+        {"point": [28.0, 13.0, 9.0], "inside": false},
+        {"point": [0.0, 0.0, 31.0], "inside": false}
+      ]
+    },
+    "three-part-assembly": {
+      "category": "assembly-transform",
+      "spec_file": "specs/three-part-assembly.md",
+      "requirement_ids": ["R1", "R2", "R3", "R4", "R5"],
+      "requirement_coverage": {
+        "R1": ["solid count and per-solid bboxes"],
+        "R2": ["base bbox, volume, cylinders and probes"],
+        "R3": ["spacer bbox, volume, cylinders and probes"],
+        "R4": ["top bbox, volume, cylinder and probes"],
+        "R5": ["gap probes", "overall bbox"]
+      },
+      "expected_bbox_mm": {
+        "min": [-50.0, -30.0, 0.0],
+        "max": [50.0, 30.0, 41.0]
+      },
+      "expected_solids": 3,
+      "volume_range_mm3": [56179.71, 56181.71],
+      "expected_solid_bboxes": [
+        {
+          "bbox": {"min": [-50.0, -30.0, 0.0], "max": [50.0, 30.0, 6.0]},
+          "volume_range_mm3": [35320.92, 35321.92]
+        },
+        {
+          "bbox": {"min": [-20.0, -20.0, 16.0], "max": [20.0, 20.0, 26.0]},
+          "volume_range_mm3": [9424.28, 9425.28]
+        },
+        {
+          "bbox": {"min": [-30.0, -20.0, 36.0], "max": [30.0, 20.0, 41.0]},
+          "volume_range_mm3": [11434.01, 11435.01]
+        }
+      ],
+      "required_cylinders": [
+        {"kind": "internal", "axis": "z", "radius_mm": 3.0, "anchor_mm": [-40.0, -20.0], "span_mm": [0.0, 6.0]},
+        {"kind": "internal", "axis": "z", "radius_mm": 3.0, "anchor_mm": [-40.0, 20.0], "span_mm": [0.0, 6.0]},
+        {"kind": "internal", "axis": "z", "radius_mm": 3.0, "anchor_mm": [40.0, -20.0], "span_mm": [0.0, 6.0]},
+        {"kind": "internal", "axis": "z", "radius_mm": 3.0, "anchor_mm": [40.0, 20.0], "span_mm": [0.0, 6.0]},
+        {"kind": "external", "axis": "z", "radius_mm": 20.0, "anchor_mm": [0.0, 0.0], "span_mm": [16.0, 26.0]},
+        {"kind": "internal", "axis": "z", "radius_mm": 10.0, "anchor_mm": [0.0, 0.0], "span_mm": [16.0, 26.0]},
+        {"kind": "internal", "axis": "z", "radius_mm": 6.0, "anchor_mm": [0.0, 0.0], "span_mm": [36.0, 41.0]}
+      ],
+      "point_probes": [
+        {"point": [0.0, 0.0, 3.0], "inside": true},
+        {"point": [15.0, 0.0, 21.0], "inside": true},
+        {"point": [20.0, 0.0, 38.0], "inside": true},
+        {"point": [40.0, 20.0, 3.0], "inside": false},
+        {"point": [0.0, 0.0, 21.0], "inside": false},
+        {"point": [0.0, 0.0, 38.0], "inside": false},
+        {"point": [0.0, 0.0, 11.0], "inside": false},
+        {"point": [0.0, 0.0, 31.0], "inside": false}
+      ]
+    },
+    "modification-task": {
+      "category": "revision-preservation",
+      "spec_file": "specs/modification-task.md",
+      "requirement_ids": ["R1", "R2", "R3", "R4", "R5", "R6", "R7"],
+      "requirement_coverage": {
+        "R1": ["preserved-hole cylinders/probes and bbox"],
+        "R2": ["preserved-pocket probes and volume"],
+        "R3": ["old-hole material probe"],
+        "R4": ["new-hole cylinder and probe"],
+        "R5": ["boss cylinder and material probe"],
+        "R6": ["boss-bore cylinder and probes"],
+        "R7": ["solid count", "volume and outside probe"]
+      },
+      "expected_bbox_mm": {
+        "min": [-35.0, -20.0, 0.0],
+        "max": [35.0, 20.0, 13.0]
+      },
+      "expected_solids": 1,
+      "volume_range_mm3": [21538.34, 21539.34],
+      "required_cylinders": [
+        {"kind": "internal", "axis": "z", "radius_mm": 3.0, "anchor_mm": [-25.0, -12.0], "span_mm": [0.0, 8.0]},
+        {"kind": "internal", "axis": "z", "radius_mm": 3.0, "anchor_mm": [-25.0, 12.0], "span_mm": [0.0, 8.0]},
+        {"kind": "internal", "axis": "z", "radius_mm": 3.0, "anchor_mm": [25.0, -12.0], "span_mm": [0.0, 8.0]},
+        {"kind": "internal", "axis": "z", "radius_mm": 5.0, "anchor_mm": [15.0, 8.0], "span_mm": [0.0, 8.0]},
+        {"kind": "external", "axis": "z", "radius_mm": 8.0, "anchor_mm": [0.0, 0.0], "span_mm": [8.0, 13.0]},
+        {"kind": "internal", "axis": "z", "radius_mm": 3.0, "anchor_mm": [0.0, 0.0], "span_mm": [0.0, 13.0]}
+      ],
+      "point_probes": [
+        {"point": [30.0, 0.0, 4.0], "inside": true},
+        {"point": [6.0, 0.0, 10.0], "inside": true},
+        {"point": [25.0, 12.0, 4.0], "inside": true},
+        {"point": [0.0, -12.0, 4.0], "inside": true},
+        {"point": [-25.0, -12.0, 4.0], "inside": false},
+        {"point": [15.0, 8.0, 4.0], "inside": false},
+        {"point": [0.0, 0.0, 4.0], "inside": false},
+        {"point": [0.0, 0.0, 10.0], "inside": false},
+        {"point": [0.0, -12.0, 7.0], "inside": false},
+        {"point": [0.0, 0.0, 14.0], "inside": false}
+      ]
+    }
+  }
+}

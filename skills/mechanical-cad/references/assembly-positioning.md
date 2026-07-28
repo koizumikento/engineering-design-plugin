@@ -19,7 +19,7 @@
 point_assembly = transform_part_to_assembly(point_part)
 ```
 
-回転、反転、基板上下面、ミラーを含めて確認する。CadQueryでは `cq.Location` を一箇所で構成し、穴・開口・component envelopeへ同じ変換を適用する。
+回転、反転、基板上下面、ミラーを含めて確認する。build123dではpart-local datumを `Location` / `Axis` とnamed jointで表し、fixed/root側のjointからmoving側へ `connect_to()` する。単純な静的配置では明示的な`Location`を一箇所で構成し、穴・開口・component envelopeへ同じ変換を適用する。
 
 ## 許容差スタック
 
@@ -57,7 +57,7 @@ worst_case_margin = nominal_gap
 - lid ribs、boss、fastener、seamとの局所干渉
 - assembly orderとrework access
 
-統合仕様の要求IDをCadQueryパラメータ名またはコメントに結び、後でレポートへ追跡できるようにする。
+統合仕様の要求IDをbuild123dのパラメータ名・コメントに結び、後でレポートへ追跡できるようにする。
 
 ## Verification
 
@@ -68,4 +68,4 @@ worst_case_margin = nominal_gap
 - 組立順序のdemonstration
 - 初品または治具によるtest/inspection
 
-CadQuery assemblyの公式機能は[Assemblies](https://cadquery.readthedocs.io/en/stable/assy.html)を参照する。
+build123dのsource-level jointは[Joints](https://build123d.readthedocs.io/en/latest/joints.html)を参照する。実装と実行方法は`references/build123d-api.md`に従う。

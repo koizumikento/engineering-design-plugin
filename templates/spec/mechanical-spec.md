@@ -70,7 +70,7 @@
 
 ## Deliverables
 
-- [ ] CadQuery Python
+- [ ] build123d Python
 - [ ] STEP
 - [ ] STL/3MF（用途とtessellationを記録）
 - [ ] DXF/SVG（対象面・単位を記録）
