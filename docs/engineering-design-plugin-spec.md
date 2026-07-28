@@ -198,7 +198,7 @@ For every skill change:
 7. review `git diff` for unintended copied workflow logic.
 
 The repository-local release validator is the CI source of truth for all four
-skill folders, relative Markdown links, plugin 2.0.0 manifests, marketplace
+skill folders, relative Markdown links, plugin 2.1.0 manifests, marketplace
 sources, and the absence of duplicated skill directories. It does not depend
 on a local Codex installation. GitHub Actions uses only `contents: read`,
 installs the frozen Python 3.11 environment, and runs the same validator and
