@@ -309,6 +309,10 @@ def main() -> int:
                     "angular_tolerance": 0.1,
                 },
             },
+            "step_artifact": {
+                "path": str(step_path),
+                "sha256": hashlib.sha256(step_path.read_bytes()).hexdigest(),
+            },
             "validation": source_inspection,
             "step_reimport": step_inspection,
             "expectations": expectation_result,

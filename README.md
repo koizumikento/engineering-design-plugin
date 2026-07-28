@@ -84,6 +84,15 @@ uv run python scripts/cad_runner.py input.py -o outputs/ --report --fail-on-chec
 uv run python scripts/preview_generator.py outputs/input.step -o outputs/ --all-views
 ```
 
+生成したSTEPはread-only inspection CLIでartifact-local selectorを列挙し、個別寸法、flush/center/coaxial差分、world frame、変更前後を検証できます。JSONが正本で、selectorはtopology変更後の永続安定性を保証しません。
+
+```bash
+uv run python scripts/cad_inspect.py refs outputs/input.step --topology
+uv run python scripts/cad_inspect.py measure outputs/input.step --from '#s1' --extent x --expected 40 --tolerance 0.01
+uv run python scripts/cad_inspect.py frame outputs/input.step '#o1'
+uv run python scripts/cad_inspect.py diff outputs/before.step outputs/after.step --tolerance 0.01
+```
+
 ### 3. Circuit design
 
 ```bash

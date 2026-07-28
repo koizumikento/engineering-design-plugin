@@ -104,7 +104,13 @@ The runner:
 - reimports STEP in the same pinned build123d/`build123d_occt` runtime;
 - checks validity, bbox, topology, direct-child labels and transforms;
 - evaluates the source module's `cad_expectations`;
-- records source SHA-256 and the `build123d`/`build123d_occt` runtime versions.
+- records source and STEP SHA-256 plus the
+  `build123d`/`build123d_occt` runtime versions.
+
+Use `scripts/cad_inspect.py` after generation for artifact-local selectors,
+individual dimensions, read-only alignment deltas, world frames, and
+before/after comparison. Keep those results separate from source-defined
+`cad_expectations`; face and edge ordinals may change after topology edits.
 
 Generate visual evidence through the neutral STEP artifact:
 

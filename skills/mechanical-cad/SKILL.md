@@ -27,16 +27,17 @@ description: Create, revise, execute, and validate parametric mechanical designs
      <input.py> -o <outputs/> --report --fail-on-check
    ```
 
-11. For a new model or visible geometry change, review the STEP preview according to `references/snapshot-review.md`. Use one isometric view for a simple part and all views for assemblies, hidden-geometry risk, multi-axis features, or repairs:
+11. Inspect every generated STEP with `references/inspection-and-validation.md`. Run `refs` as the baseline, then use `measure`, `align`, `frame`, and `diff` for specification-driven facts, interfaces, transforms, and modification invariants. Rediscover artifact-local selectors after topology changes.
+12. For a new model or visible geometry change, review the STEP preview according to `references/snapshot-review.md`. Use one isometric view for a simple part and all views for assemblies, hidden-geometry risk, multi-axis features, or repairs:
 
    ```bash
    uv run python scripts/preview_generator.py \
      <outputs/model.step> -o <outputs/> --all-views
    ```
 
-12. Compare the report's STEP reimport validity, bounding box, volume, centre of mass, topology counts, component labels/transforms, and expectation checks with the CAD brief and specification. Convert visual concerns into supported deterministic checks before treating them as resolved.
-13. If any stage fails, use `references/repair-loop.md`: classify it, make the smallest responsible source change, and rerun the failed and dependent checks.
-14. Report generated artifacts, preview files reviewed or the documented skip reason, checks performed, deviations, assumptions, unsupported checks, and any manufacturing or compliance claim that remains unverified.
+13. Compare the report's STEP reimport validity, bounding box, volume, centre of mass, topology counts, component labels/transforms, expectations, and inspection results with the CAD brief and specification. Convert visual concerns into supported deterministic checks before treating them as resolved.
+14. If any stage fails, use `references/repair-loop.md`: classify it, make the smallest responsible source change, and rerun the failed and dependent checks.
+15. Report generated artifacts, local selectors used, preview files reviewed or the documented skip reason, checks performed, deviations, assumptions, unsupported checks, and any manufacturing or compliance claim that remains unverified.
 
 ## Validation rules
 
@@ -45,6 +46,8 @@ description: Create, revise, execute, and validate parametric mechanical designs
 - Inspect minimum wall/feature sizes, tolerance stack, fit, assembly sequence, and process-specific constraints.
 - Set STL tessellation deliberately for the part scale and use; do not use a mesh as the dimensional source of truth.
 - Treat build123d joints as source-level placement operations. Do not claim that exported STEP preserves a live constraint.
+- Treat `scripts/cad_inspect.py align` as a read-only diagnostic. Apply placement corrections in source and regenerate STEP.
+- Treat face and edge selectors as artifact-local. Do not preserve arbitrary topology ordinals as source design intent.
 - Do not hide source execution, Boolean, fillet, STEP reimport, label, or expectation failures.
 - Do not use a preview image as dimensional proof. Tie visual findings to runner evidence or report them as unverified.
 - Do not claim an IP rating, load capacity, fatigue life, thermal performance, or production readiness without the corresponding analysis/test evidence.
@@ -54,6 +57,7 @@ description: Create, revise, execute, and validate parametric mechanical designs
 
 - `references/cad-brief.md`: input precedence, drawings/images, conflicts, assumptions, and pre-modeling validation targets.
 - `references/build123d-api.md`: API modes, source contract, modeling patterns, labels, joints, exports, and runner.
+- `references/inspection-and-validation.md`: STEP-local refs, measurements, read-only alignment, world frames, diffs, and provenance.
 - `references/assembly-positioning.md`: datums, transforms, tolerance stacks, mating and motion/service envelopes.
 - `references/snapshot-review.md`: required preview review, packet sizing, skip conditions, and visual-to-deterministic checks.
 - `references/repair-loop.md`: failure classification, minimal source repair, dependent reruns, and unresolved reporting.
