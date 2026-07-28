@@ -13,6 +13,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 RUNTIME_PYTHON = REPO_ROOT / ".venv" / "bin" / "python"
 RUNNER = REPO_ROOT / "scripts" / "cad_runner.py"
+INSPECT = REPO_ROOT / "scripts" / "cad_inspect.py"
 EXAMPLE = (
     REPO_ROOT
     / "examples"
@@ -40,6 +41,7 @@ class Build123dProductionTests(unittest.TestCase):
         self.assertNotIn('"cadquery>=', pyproject)
         self.assertTrue((REPO_ROOT / "uv.lock").is_file())
         self.assertTrue(RUNNER.is_file())
+        self.assertTrue(INSPECT.is_file())
         self.assertTrue(EXAMPLE.is_file())
         self.assertFalse((REPO_ROOT / "scripts" / "cadquery_runner.py").exists())
         runner_source = RUNNER.read_text(encoding="utf-8")
@@ -92,11 +94,9 @@ class Build123dProductionTests(unittest.TestCase):
             )
 
             report = json.loads(
-                (
-                    output
-                    / "reports"
-                    / "enclosure_assembly-cad-summary.json"
-                ).read_text(encoding="utf-8")
+                (output / "reports" / "enclosure_assembly-cad-summary.json").read_text(
+                    encoding="utf-8"
+                )
             )
             self.assertEqual(report["engine"], "build123d")
             self.assertEqual(
@@ -106,6 +106,10 @@ class Build123dProductionTests(unittest.TestCase):
             self.assertRegex(report["runtime"]["build123d_occt"], r"^7\.")
             self.assertTrue(report["validation"]["valid"])
             self.assertTrue(report["step_reimport"]["valid"])
+            self.assertEqual(
+                len(report["step_artifact"]["sha256"]),
+                64,
+            )
             self.assertEqual(report["step_reimport"]["topology"]["solids"], 2)
             self.assertTrue(report["expectations"]["passed"])
             self.assertEqual(
@@ -117,6 +121,25 @@ class Build123dProductionTests(unittest.TestCase):
             }
             self.assertEqual(source_components["base"]["joints"], ["lid_seat"])
             self.assertEqual(source_components["lid"]["joints"], ["underside"])
+
+            inspected = subprocess.run(
+                [
+                    str(RUNTIME_PYTHON),
+                    str(INSPECT),
+                    "refs",
+                    str(output / "enclosure_assembly.step"),
+                ],
+                cwd=REPO_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            inspection = json.loads(inspected.stdout)
+            provenance = inspection["artifact"]["related_runner_report"]
+            self.assertTrue(provenance["matches"]["source_sha256"])
+            self.assertTrue(provenance["matches"]["step_sha256"])
+            self.assertTrue(provenance["matches"]["runtime"])
+            self.assertTrue(provenance["matches"]["units"])
 
     @unittest.skipUnless(
         RUNTIME_PYTHON.is_file(),

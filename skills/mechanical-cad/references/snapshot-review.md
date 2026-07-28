@@ -63,10 +63,12 @@ passed.
 Treat visual review as diagnosis:
 
 - apparent pattern asymmetry -> check controlling offsets and expectations;
-- an offset component -> check its reported transform and bounding box;
+- an offset component -> use `cad_inspect.py frame` and check its transform;
 - a missing feature -> check topology and the corresponding named parameter;
-- a suspicious cavity or through-hole -> add a supported bbox/topology check
-  or report that the dimension is not yet independently verified;
+- a suspicious cavity or through-hole -> discover a local selector and use
+  `cad_inspect.py measure`, or report that the dimension is not independently
+  verified;
+- an apparently misaligned interface -> use `cad_inspect.py align`;
 - unexpected proportions -> compare the report envelope with the CAD brief.
 
 Change source, regenerate STEP, rerun the failed deterministic checks, and

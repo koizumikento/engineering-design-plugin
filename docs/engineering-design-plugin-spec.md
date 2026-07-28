@@ -82,10 +82,18 @@ Checks:
 ```bash
 uv run python -m py_compile input.py
 uv run python scripts/cad_runner.py input.py -o outputs/ --report --fail-on-check
+uv run python scripts/cad_inspect.py refs outputs/input.step
 uv run python scripts/preview_generator.py outputs/input.step -o outputs/ --all-views
 ```
 
 Shape validity, dimensions, topology, visible geometry, assembly transform, tolerance stack, and process-specific constraints are separate checks. build123d joints resolve source placement; exported STEP is not assumed to preserve a live constraint.
+
+`scripts/cad_inspect.py` is the read-only STEP inspection entrypoint. It
+provides `refs`, `measure`, `align`, `frame`, and `diff`; JSON is the canonical
+output. Occurrence, solid, face, and edge selectors are local to one artifact
+and must be rediscovered after topology changes. `cad_expectations` remains the
+source-authored stable contract, while selector-based inspection remains a
+separate result.
 
 Before implementation, consolidate inputs, source precedence, coordinate
 conventions, assumptions, conflicts, and validation targets into an internal

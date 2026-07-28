@@ -65,7 +65,8 @@ arbitrary topology index after changing geometry.
 Confirm that the expectation represents the approved design rather than an
 obsolete implementation detail. Fix source when the geometry is wrong. Change
 the expectation only when the controlling requirement or intended contract
-changed.
+changed. Rediscover local selectors after any topology change; an old face or
+edge ordinal is not evidence that the new artifact is wrong.
 
 ### Joint or placement mismatch
 
@@ -96,9 +97,15 @@ on deterministic checks that actually ran.
 ## Repair scope
 
 For changes that might affect unrelated geometry, compare the before/after
-source parameters, runner summaries, expectations, and previews. Until the
-dedicated inspection `diff` capability exists, do not claim a geometric diff
-that the current runner cannot calculate.
+source parameters, runner summaries, expectations, previews, and:
+
+```bash
+uv run python scripts/cad_inspect.py diff \
+  <before.step> <after.step> --tolerance <mm>
+```
+
+Use specific `measure`, `align`, or `frame` checks for invariants that a
+high-level artifact diff cannot prove.
 
 ## Unresolved failures
 
