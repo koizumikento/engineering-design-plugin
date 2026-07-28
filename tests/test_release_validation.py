@@ -27,7 +27,7 @@ class ReleaseValidationTests(unittest.TestCase):
             msg=f"stdout:\n{completed.stdout}\nstderr:\n{completed.stderr}",
         )
         self.assertIn("4 skills", completed.stdout)
-        self.assertIn("plugin 2.0.0", completed.stdout)
+        self.assertIn("plugin 2.1.0", completed.stdout)
 
     def test_ci_has_read_only_permissions_and_frozen_sync(self) -> None:
         workflow = (

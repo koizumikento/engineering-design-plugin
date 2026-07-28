@@ -55,7 +55,7 @@ repo-local marketplaceは `.agents/plugins/marketplace.json` です。entryは `
 
 Plugin Directoryで `Engineering Design` をinstallまたは再installし、新しいtaskで更新後のskillsを試してください。
 
-Plugin release versionは2.0.0です。Python helper projectの0.3.0とは役割が異なり、`scripts/validate_release.py`がmanifest、marketplace、skill source-of-truthをまとめて検証します。
+Plugin release versionは2.1.0です。Python helper projectの0.3.0とは役割が異なり、`scripts/validate_release.py`がmanifest、marketplace、skill source-of-truthをまとめて検証します。
 
 ## Workflow
 

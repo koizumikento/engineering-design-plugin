@@ -12,7 +12,7 @@ from urllib.parse import unquote
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_PLUGIN_VERSION = "2.0.0"
+EXPECTED_PLUGIN_VERSION = "2.1.0"
 EXPECTED_PROJECT_VERSION = "0.3.0"
 EXPECTED_SKILLS = {
     "circuit-design",
