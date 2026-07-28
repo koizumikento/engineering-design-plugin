@@ -26,7 +26,7 @@ spec-writing: IDs, sources, interfaces, acceptance, verification
           |                    |
           v                    v
 mechanical-cad             circuit-design
-CadQuery/STEP/report       SKiDL/KiCad/BOM/ERC/SPICE
+build123d/STEP/report      SKiDL/KiCad/BOM/ERC/SPICE
           |                    |
           +----------+---------+
                      v
@@ -71,7 +71,7 @@ Input:
 
 Outputs:
 
-- CadQuery Python
+- build123d Python for parts and assemblies
 - STEP primary neutral geometry
 - purpose-specific STL/3MF/DXF/SVG/PNG
 - CAD summary JSON
@@ -80,11 +80,11 @@ Checks:
 
 ```bash
 uv run python -m py_compile input.py
-uv run python scripts/cadquery_runner.py input.py -o outputs/ --report --fail-on-invalid
+uv run python scripts/cad_runner.py input.py -o outputs/ --report --fail-on-check
 uv run python scripts/preview_generator.py outputs/input.step -o outputs/ --all-views
 ```
 
-Shape validity, dimensions, topology, visible geometry, assembly transform, tolerance stack, and process-specific constraints are separate checks.
+Shape validity, dimensions, topology, visible geometry, assembly transform, tolerance stack, and process-specific constraints are separate checks. build123d joints resolve source placement; exported STEP is not assumed to preserve a live constraint.
 
 ### `circuit-design`
 
@@ -136,7 +136,7 @@ The checker evaluates parsed nominal dimensions only. 3D collision/minimum-gap, 
 | Artifact | Role |
 |---|---|
 | specification Markdown | requirements/interface baseline |
-| CadQuery Python | parametric mechanical definition |
+| build123d Python | parametric mechanical definition |
 | STEP | neutral mechanical exchange and integration geometry |
 | SKiDL Python | logical circuit definition |
 | KiCad schematic/project | readable ECAD review and PCB handoff |
@@ -153,7 +153,7 @@ Do not edit two supposed sources of truth independently. If generated KiCad or C
 - Label calculations and inferences separately from source facts.
 - Cite exact MPN documentation for pinout, footprint, thermal, stability, opening, and mating geometry.
 
-Current source families used by references include CadQuery official docs, SKiDL official docs, KiCad 9 docs, ngspice/PySpice docs, NASA Systems Engineering Handbook, and JSA/IEC official standards catalogs.
+Current source families used by references include build123d official docs, SKiDL official docs, KiCad 9 docs, ngspice/PySpice docs, NASA Systems Engineering Handbook, and JSA/IEC official standards catalogs.
 
 ## Plugin packaging
 

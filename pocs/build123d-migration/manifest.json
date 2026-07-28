@@ -1,0 +1,57 @@
+{
+  "bbox_tolerance_mm": 0.05,
+  "cylinder_tolerance_mm": 0.05,
+  "volume_relative_tolerance": 0.02,
+  "models": {
+    "calibration_block": {
+      "cadquery_source": "cadquery_models/calibration_block.py",
+      "build123d_source": "build123d_models/calibration_block.py",
+      "expected_bbox_mm": [40.0, 30.0, 12.0],
+      "expected_solids": 1,
+      "required_cylinders": [
+        {"axis": "z", "radius_mm": 1.7, "anchor_mm": [-12.0, 0.0]},
+        {"axis": "z", "radius_mm": 1.7, "anchor_mm": [12.0, 0.0]}
+      ]
+    },
+    "bracket": {
+      "cadquery_source": "cadquery_models/bracket.py",
+      "build123d_source": "build123d_models/bracket.py",
+      "expected_bbox_mm": [50.0, 40.0, 60.0],
+      "expected_solids": 1,
+      "required_cylinders": [
+        {"axis": "z", "radius_mm": 3.2, "anchor_mm": [25.0, 20.0]},
+        {"axis": "x", "radius_mm": 3.2, "anchor_mm": [20.0, 30.0]}
+      ]
+    },
+    "enclosure_with_pcb": {
+      "cadquery_source": "cadquery_models/enclosure_with_pcb.py",
+      "build123d_source": "build123d_models/enclosure_with_pcb.py",
+      "expected_bbox_mm": [58.0, 38.0, 22.0],
+      "expected_solids": 1,
+      "required_cylinders": [
+        {"axis": "z", "radius_mm": 1.05, "anchor_mm": [22.0, 12.0]},
+        {"axis": "z", "radius_mm": 1.05, "anchor_mm": [-22.0, 12.0]},
+        {"axis": "z", "radius_mm": 1.05, "anchor_mm": [22.0, -12.0]},
+        {"axis": "z", "radius_mm": 1.05, "anchor_mm": [-22.0, -12.0]}
+      ]
+    },
+    "sensor_enclosure": {
+      "cadquery_source": "cadquery_models/sensor_enclosure.py",
+      "build123d_source": "build123d_models/sensor_enclosure.py",
+      "expected_bbox_mm": [60.0, 40.0, 25.0],
+      "expected_solids": 2,
+      "required_cylinders": [
+        {"axis": "x", "radius_mm": 6.25, "anchor_mm": [0.0, 10.0]},
+        {"axis": "z", "radius_mm": 1.6, "anchor_mm": [25.0, 15.0]},
+        {"axis": "z", "radius_mm": 3.25, "anchor_mm": [25.0, 15.0]},
+        {"axis": "z", "radius_mm": 1.25, "anchor_mm": [-25.0, -15.0]}
+      ]
+    }
+  },
+  "legacy_sources": {
+    "calibration_block": "examples/calibration-block/src/calibration_block.py",
+    "bracket": "templates/mechanical/bracket.py",
+    "enclosure_with_pcb": "templates/mechanical/enclosure_with_pcb.py",
+    "sensor_enclosure": "examples/sensor-enclosure/src/enclosure.py"
+  }
+}

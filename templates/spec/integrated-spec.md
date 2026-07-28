@@ -97,7 +97,7 @@
 ## Deliverables
 
 - [ ] integrated specification and interface table
-- [ ] mechanical CadQuery/STEP and validation report
+- [ ] mechanical build123d/STEP and validation report
 - [ ] SKiDL/KiCad/BOM/ERC artifacts
 - [ ] text screening report
 - [ ] 3D interference/minimum-gap evidence

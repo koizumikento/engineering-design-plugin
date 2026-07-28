@@ -1,6 +1,6 @@
 # Engineering Design Agent Skills
 
-自然言語の要望を、検証可能な仕様、CadQuery機械モデル、SKiDL/KiCad回路、PCB・筐体統合チェックへつなぐCodex向けスキル集です。
+自然言語の要望を、検証可能な仕様、build123d機械モデル、SKiDL/KiCad回路、PCB・筐体統合チェックへつなぐCodex向けスキル集です。
 
 `skills/` が唯一の運用正本です。各 `SKILL.md` は中核ワークフロー、`references/` は必要時だけ読む技術資料、`agents/openai.yaml` はUIメタデータを保持します。
 
@@ -9,7 +9,7 @@
 | Skill | 主な責務 | 主な成果物 |
 |---|---|---|
 | `spec-writing` | 要求抽出、ID、根拠、interface、検証計画 | `specs/*.md` |
-| `mechanical-cad` | CadQuery設計、STEP-first export、形状検証 | `.py`, STEP, STL, PNG, JSON report |
+| `mechanical-cad` | build123d部品・アセンブリ、STEP-first検証 | `.py`, STEP, STL, PNG, JSON report |
 | `circuit-design` | SKiDL回路、BOM/ERC、KiCad 9、任意simulation | `.py`, BOM, ERC, `.kicad_sch`, simulation |
 | `integration` | PCB・筐体の座標、取付、開口、envelope整合 | integration report |
 
@@ -20,7 +20,7 @@
 前提:
 
 - `uv`
-- Python 3.9以上3.14未満
+- Python 3.11.x（repository default: 3.11.4）
 - KiCad 9（KiCad schematic validationを行う場合）
 - ngspice（SPICE analysisを行う場合）
 - optional: VTK（PNG preview）
@@ -32,7 +32,7 @@ uv sync
 環境確認:
 
 ```bash
-uv run python -c "import cadquery, skidl; print(cadquery.__version__, skidl.__version__)"
+uv run python -c "import build123d, skidl; print(build123d.__version__, skidl.__version__)"
 kicad-cli --version
 ngspice --version
 ```
@@ -69,11 +69,14 @@ Templates:
 
 ```bash
 uv run python -m py_compile input.py
-uv run python scripts/cadquery_runner.py input.py -o outputs/ --report --fail-on-invalid
-uv run python scripts/preview_generator.py outputs/input.step -o outputs/ --all-views
+uv run python scripts/cad_runner.py input.py -o outputs/ --report --fail-on-check
 ```
 
-CadQuery Pythonをparameterized design definition、STEPをneutral geometry exchange、STL/3MF/DXF/SVG/PNGを用途別の派生成果物として扱います。`isValid()` はBREP整合性であり、寸法、干渉、強度、工程適合を自動保証しません。
+単一部品とアセンブリの両方でbuild123d Pythonをparameterized design definition、STEPをneutral geometry exchange、STL/3MF/DXF/SVG/PNGを用途別の派生成果物として扱います。runnerはSTEPを再importし、BREP、部品label、resolved transform、source-defined expectationを検証します。validityは寸法、干渉、強度、工程適合を自動保証しません。
+
+```bash
+uv run python scripts/preview_generator.py outputs/input.step -o outputs/ --all-views
+```
 
 ### 3. Circuit design
 
@@ -130,6 +133,7 @@ engineering-design-plugin/
 ├── scripts/
 ├── templates/
 ├── examples/
+├── pocs/
 └── docs/
 ```
 
@@ -137,7 +141,8 @@ engineering-design-plugin/
 
 ## Examples
 
-- `examples/calibration-block`: CadQuery validation/report/preview
+- `examples/calibration-block`: build123d validation/report/preview
+- `examples/build123d-enclosure-assembly`: build123d named-joint assembly and STEP reimport validation
 - `examples/sensor-enclosure`: enclosure model
 - `examples/voltage-divider`, `rc-lowpass-filter`: passive circuit examples
 - `examples/non-inverting-amplifier`, `inverting-amplifier`: op-amp examples
@@ -146,9 +151,19 @@ engineering-design-plugin/
 
 Examplesは教育・回帰用であり、部品値、開口、IP表現、製造公差をそのままproduction designへ流用しないでください。
 
+## Technical evaluations
+
+- `pocs/build123d-migration`: STR-228/STR-231の過去比較evidence
+- `docs/decisions/STR-228-build123d-migration.md`: comparison evidence and migration decision
+- `docs/decisions/STR-231-agent-generation-benchmark.md`: 60-trial agent-generation accuracy decision
+- `docs/decisions/STR-229-build123d-unification.md`: build123d単一基盤の最終decision
+- `docs/decisions/STR-232-assembly-routing.md`: superseded用途別routing decision
+
+STR-228/STR-231のPoCは過去の比較evidenceとしてproduction workflowから隔離したまま保持します。productionはrootのbuild123d runtimeと`scripts/cad_runner.py`だけを使用します。
+
 ## References
 
-- CadQuery: `skills/mechanical-cad/references/`
+- build123d: `skills/mechanical-cad/references/`
 - SKiDL/KiCad/ngspice: `skills/circuit-design/references/`
 - requirements and verification: `skills/spec-writing/references/spec-templates.md`
 - interface control and integration: `skills/integration/references/interface-spec.md`

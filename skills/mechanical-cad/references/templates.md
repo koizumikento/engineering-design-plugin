@@ -1,114 +1,110 @@
-# CadQuery パターン集
+# build123d patterns
 
-## 目次
-
-Plate / Enclosure / Bosses / Connector opening / Assembly / Validation
-
-寸法は例示値である。仕様、メーカー図面、工程能力、公差解析から置き換え、各パターンを実行・検証する。
+Example dimensions are placeholders. Replace them from the specification,
+manufacturer drawing, process capability, and tolerance analysis.
 
 ## Parametric plate with hole pattern
 
 ```python
-import cadquery as cq
+from build123d import Align, Box, Cylinder, Pos
 
-PLATE_X = 80.0
-PLATE_Y = 50.0
-PLATE_Z = 4.0
+PLATE_X, PLATE_Y, PLATE_Z = 80.0, 50.0, 4.0
 HOLE_D = 3.4
 MOUNT_POINTS = [(-30.0, -15.0), (30.0, -15.0), (-30.0, 15.0), (30.0, 15.0)]
 
-result = (
-    cq.Workplane("XY")
-    .box(PLATE_X, PLATE_Y, PLATE_Z)
-    .faces(">Z").workplane()
-    .pushPoints(MOUNT_POINTS)
-    .hole(HOLE_D)
+result = Box(
+    PLATE_X,
+    PLATE_Y,
+    PLATE_Z,
+    align=(Align.CENTER, Align.CENTER, Align.MIN),
 )
-
-assert result.val().isValid()
+for x, y in MOUNT_POINTS:
+    result -= Pos(x, y, -1) * Cylinder(
+        HOLE_D / 2,
+        PLATE_Z + 2,
+        align=(Align.CENTER, Align.CENTER, Align.MIN),
+    )
+result = result.clean()
 ```
 
 ## Hollow enclosure body
 
 ```python
-import cadquery as cq
+from build123d import Align, Box, Pos
 
-OUTER_X = 100.0
-OUTER_Y = 60.0
-OUTER_Z = 35.0
+OUTER_X, OUTER_Y, OUTER_Z = 100.0, 60.0, 35.0
 WALL = 2.4
 
-outer = cq.Workplane("XY").box(OUTER_X, OUTER_Y, OUTER_Z)
-result = outer.faces(">Z").shell(-WALL)
-
-shape = result.val()
-assert shape.isValid()
-assert shape.Volume() > 0
+outer = Box(
+    OUTER_X,
+    OUTER_Y,
+    OUTER_Z,
+    align=(Align.CENTER, Align.CENTER, Align.MIN),
+)
+inner = Pos(0, 0, WALL) * Box(
+    OUTER_X - 2 * WALL,
+    OUTER_Y - 2 * WALL,
+    OUTER_Z,
+    align=(Align.CENTER, Align.CENTER, Align.MIN),
+)
+result = (outer - inner).clean()
 ```
 
-shellが失敗する形状では、外形と内側cut toolを別々に構築する。蓋、lip、gasket、snap、draftをこの最小例へ無条件に足さない。
+Constructing the cavity explicitly makes the controlling wall and floor
+dimensions visible. Add draft, lip, gasket, and snap features only when sourced.
 
-## Named bosses from interface coordinates
+## Named bosses
 
 ```python
-import cadquery as cq
+from build123d import Align, Cylinder, Pos
 
-BOSS_Z = 6.0
-BOSS_OD = 7.0
-PILOT_D = 2.5
+BOSS_Z, BOSS_OD, PILOT_D = 6.0, 7.0, 2.5
 MOUNT_POINTS = [(-22.0, -12.0), (22.0, -12.0), (-22.0, 12.0), (22.0, 12.0)]
 
-bosses = (
-    cq.Workplane("XY")
-    .pushPoints(MOUNT_POINTS)
-    .circle(BOSS_OD / 2)
-    .extrude(BOSS_Z)
-    .faces(">Z").workplane()
-    .pushPoints(MOUNT_POINTS)
-    .hole(PILOT_D)
-)
+bosses = None
+for x, y in MOUNT_POINTS:
+    boss = Pos(x, y, 0) * Cylinder(
+        BOSS_OD / 2,
+        BOSS_Z,
+        align=(Align.CENTER, Align.CENTER, Align.MIN),
+    )
+    pilot = Pos(x, y, 0) * Cylinder(
+        PILOT_D / 2,
+        BOSS_Z,
+        align=(Align.CENTER, Align.CENTER, Align.MIN),
+    )
+    boss = boss - pilot
+    bosses = boss if bosses is None else bosses + boss
 ```
 
-実際のpilot、外径、高さ、rib、insertは材質、締結方法、ねじ込み長さ、成形/造形条件から決める。
-
-## Connector opening as sourced envelope
+## Assembly with explicit locations and labels
 
 ```python
-OPENING_W = 10.2   # replace from connector + plug + tolerance stack
-OPENING_H = 4.1
-OPENING_Y = 0.0
-OPENING_Z = 8.0
+from build123d import Compound, Pos
 
-result = (
-    body.faces(">X").workplane(centerOption="CenterOfBoundBox")
-    .center(OPENING_Y, OPENING_Z)
-    .rect(OPENING_W, OPENING_H)
-    .cutThruAll()
-)
+base.label = "base"
+pcb = Pos(0, 0, pcb_seating_z) * pcb_envelope
+pcb.label = "pcb"
+lid = Pos(0, 0, lid_seating_z) * lid
+lid.label = "lid"
+result = Compound(label="device", children=[base, pcb, lid])
 ```
 
-開口寸法だけでなく、receptacle/plug datum、板厚、latch、挿抜、ケーブル、指アクセスを確認する。
+For datum relationships that should recompute placement, prefer a named
+build123d joint as described in `build123d-api.md`.
 
-## Assembly with explicit locations
+## Validation
 
 ```python
-assembly = cq.Assembly(name="device")
-assembly.add(enclosure, name="enclosure", loc=cq.Location((0, 0, 0)))
-assembly.add(pcb_envelope, name="pcb", loc=cq.Location((0, 0, pcb_seating_z)))
-assembly.add(lid, name="lid", loc=cq.Location((0, 0, lid_seating_z)))
+assert result.is_valid
+box = result.bounding_box()
+assert box.size.X > 0 and box.size.Y > 0 and box.size.Z > 0
+assert result.volume > 0
 ```
 
-Location値は統合仕様のtransformと対応させる。
+Generate standard artifacts with:
 
-## Validation block
-
-```python
-shape = result.val()
-assert shape.isValid(), "invalid result"
-bb = shape.BoundingBox()
-assert bb.xlen > 0 and bb.ylen > 0 and bb.zlen > 0
-assert shape.Volume() > 0
-print({"bbox_mm": [bb.xlen, bb.ylen, bb.zlen], "volume_mm3": shape.Volume()})
+```bash
+uv run python scripts/cad_runner.py model.py \
+  -o outputs/ --report --fail-on-check
 ```
-
-標準成果物は `scripts/cadquery_runner.py --report --fail-on-invalid` で生成し、複数視点PNGも確認する。

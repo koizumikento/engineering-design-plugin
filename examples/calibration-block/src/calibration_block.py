@@ -1,31 +1,51 @@
-"""
-Calibration block - CadQuery runner validation sample.
-"""
+"""build123d runner validation sample."""
 
-import cadquery as cq
+from build123d import Align, Axis, Box, Cylinder, Pos, fillet
 
 
-width = 40.0
-depth = 30.0
-height = 12.0
-hole_diameter = 3.4
-hole_spacing_x = 24.0
-pocket_width = 20.0
-pocket_depth = 10.0
-pocket_cut_depth = 2.0
-outer_fillet = 1.0
+WIDTH = 40.0
+DEPTH = 30.0
+HEIGHT = 12.0
+HOLE_DIAMETER = 3.4
+HOLE_X = 12.0
+POCKET_WIDTH = 20.0
+POCKET_DEPTH = 10.0
+POCKET_CUT_DEPTH = 2.0
+OUTER_FILLET = 1.0
 
-result = (
-    cq.Workplane("XY")
-    .box(width, depth, height)
-    .edges("|Z").fillet(outer_fillet)
-    .faces(">Z").workplane()
-    .rect(hole_spacing_x, 1.0, forConstruction=True)
-    .vertices()
-    .hole(hole_diameter)
-    .faces(">Z").workplane()
-    .rect(pocket_width, pocket_depth)
-    .cutBlind(-pocket_cut_depth)
+result = Box(
+    WIDTH,
+    DEPTH,
+    HEIGHT,
+    align=(Align.CENTER, Align.CENTER, Align.MIN),
 )
+result = fillet(result.edges().filter_by(Axis.Z), radius=OUTER_FILLET)
 
-assert result.val().isValid(), "Invalid calibration block geometry"
+for x_position in (-HOLE_X, HOLE_X):
+    result -= Pos(x_position, 0, -1) * Cylinder(
+        HOLE_DIAMETER / 2,
+        HEIGHT + 2,
+        align=(Align.CENTER, Align.CENTER, Align.MIN),
+    )
+
+result -= Pos(0, 0, HEIGHT - POCKET_CUT_DEPTH) * Box(
+    POCKET_WIDTH,
+    POCKET_DEPTH,
+    POCKET_CUT_DEPTH + 1,
+    align=(Align.CENTER, Align.CENTER, Align.MIN),
+)
+result = result.clean()
+result.label = "calibration_block"
+
+cad_metadata = {
+    "units": "mm",
+    "kind": "part",
+    "origin": "footprint center on bottom face",
+}
+cad_expectations = {
+    "tolerance_mm": 1e-6,
+    "topology": {"solids": 1},
+    "bounding_box": {"x_len": WIDTH, "y_len": DEPTH, "z_len": HEIGHT},
+}
+
+assert result.is_valid
