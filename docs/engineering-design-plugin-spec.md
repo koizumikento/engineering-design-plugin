@@ -178,10 +178,14 @@ Current source families used by references include build123d official docs, SKiD
   source.path -> ./plugins/engineering-design
 
 plugins/engineering-design/.codex-plugin/plugin.json
-  skills -> ./../../skills/
+  skills -> ./skills/
 ```
 
-`plugins/engineering-design/skills/` and `.agents/plugins/engineering-design/skills/` copies are intentionally absent. The repo-local marketplace and plugin package point to the committed `skills/` source of truth.
+`skills/` remains the authoring source of truth. Codex installs only the selected
+plugin directory into its versioned cache, so the release package must be
+self-contained. `scripts/sync_codex_plugin_package.py` copies the skills,
+runtime scripts, templates, and Python dependency files into
+`plugins/engineering-design/`; generated copies must not be edited directly.
 
 Plugin metadata is presentation/install information only. Operational instructions stay in `skills/*/SKILL.md`; UI metadata stays in `skills/*/agents/openai.yaml`.
 
@@ -190,16 +194,17 @@ Plugin metadata is presentation/install information only. Operational instructio
 For every skill change:
 
 1. run `uv sync --frozen`;
-2. run `uv run python scripts/validate_release.py`;
-3. run `uv run python -m unittest discover -s tests`;
-4. compile changed Python scripts;
-5. execute affected helper entrypoints against representative examples;
-6. inspect generated reports/artifacts;
-7. review `git diff` for unintended copied workflow logic.
+2. run `uv run python scripts/sync_codex_plugin_package.py`;
+3. run `uv run python scripts/validate_release.py`;
+4. run `uv run python -m unittest discover -s tests`;
+5. compile changed Python scripts;
+6. execute affected helper entrypoints against representative examples;
+7. inspect generated reports/artifacts;
+8. review `git diff` for unintended copied workflow logic.
 
 The repository-local release validator is the CI source of truth for all four
-skill folders, relative Markdown links, plugin 2.1.0 manifests, marketplace
-sources, and the absence of duplicated skill directories. It does not depend
+skill folders, relative Markdown links, plugin 2.1.1 manifests, marketplace
+sources, and exact synchronization of the packaged runtime files. It does not depend
 on a local Codex installation. GitHub Actions uses only `contents: read`,
 installs the frozen Python 3.11 environment, and runs the same validator and
 unit-test suite on pull requests and pushes to `main`.

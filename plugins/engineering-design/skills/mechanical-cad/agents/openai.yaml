@@ -1,0 +1,4 @@
+interface:
+  display_name: "Mechanical CAD"
+  short_description: "Build and validate build123d mechanical CAD."
+  default_prompt: "Use $mechanical-cad to create and validate a parametric build123d part or assembly with STEP-first engineering artifacts."

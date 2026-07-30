@@ -1,0 +1,4 @@
+interface:
+  display_name: "Circuit Design"
+  short_description: "Build and validate SKiDL and KiCad circuit artifacts."
+  default_prompt: "Use $circuit-design to create and validate the SKiDL circuit, KiCad schematic, BOM, ERC, and requested simulations."
