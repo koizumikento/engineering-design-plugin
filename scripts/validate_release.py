@@ -56,15 +56,22 @@ def validate_synced_tree(
     label: str,
     errors: list[str],
 ) -> None:
+    def is_runtime_source(path: Path, root: Path) -> bool:
+        relative_path = path.relative_to(root)
+        return (
+            "__pycache__" not in relative_path.parts
+            and path.suffix not in {".pyc", ".pyo"}
+        )
+
     source_files = {
         path.relative_to(source)
         for path in source.rglob("*")
-        if path.is_file()
+        if path.is_file() and is_runtime_source(path, source)
     }
     target_files = {
         path.relative_to(target)
         for path in target.rglob("*")
-        if path.is_file()
+        if path.is_file() and is_runtime_source(path, target)
     }
     if source_files != target_files:
         missing = sorted(str(path) for path in source_files - target_files)

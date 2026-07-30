@@ -22,7 +22,11 @@ def replace_directory(name: str) -> None:
     target = PACKAGE_ROOT / name
     if target.exists():
         shutil.rmtree(target)
-    shutil.copytree(source, target)
+    shutil.copytree(
+        source,
+        target,
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo"),
+    )
 
 
 def sync_runtime_scripts() -> None:
