@@ -12,7 +12,7 @@ from urllib.parse import unquote
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_PLUGIN_VERSION = "2.1.0"
+EXPECTED_PLUGIN_VERSION = "2.1.1"
 EXPECTED_PROJECT_VERSION = "0.3.0"
 EXPECTED_SKILLS = {
     "circuit-design",
@@ -26,6 +26,12 @@ ACTION_PATTERN = re.compile(
 )
 MARKDOWN_LINK_PATTERN = re.compile(r"\]\(([^)]+)\)")
 REFERENCE_PATH_PATTERN = re.compile(r"`(references/[^`\s]+)`")
+PACKAGED_RUNTIME_SCRIPTS = {
+    "cad_inspect.py",
+    "cad_runner.py",
+    "integration_checker.py",
+    "preview_generator.py",
+}
 
 
 class ValidationError(RuntimeError):
@@ -42,6 +48,33 @@ def load_json(path: Path) -> dict:
             f"{path.relative_to(REPO_ROOT)}: expected a JSON object"
         )
     return value
+
+
+def validate_synced_tree(
+    source: Path,
+    target: Path,
+    label: str,
+    errors: list[str],
+) -> None:
+    source_files = {
+        path.relative_to(source)
+        for path in source.rglob("*")
+        if path.is_file()
+    }
+    target_files = {
+        path.relative_to(target)
+        for path in target.rglob("*")
+        if path.is_file()
+    }
+    if source_files != target_files:
+        missing = sorted(str(path) for path in source_files - target_files)
+        extra = sorted(str(path) for path in target_files - source_files)
+        errors.append(f"{label}: file set mismatch; missing={missing}, extra={extra}")
+    for relative_path in sorted(source_files & target_files):
+        if (source / relative_path).read_bytes() != (
+            target / relative_path
+        ).read_bytes():
+            errors.append(f"{label}: stale packaged file {relative_path}")
 
 
 def parse_frontmatter(path: Path) -> dict[str, str]:
@@ -190,10 +223,10 @@ def validate_manifests(errors: list[str]) -> None:
 
     if root_manifest.get("skills") != "./skills/":
         errors.append("plugin.json: skills must point to ./skills/")
-    if package_manifest.get("skills") != "./../../skills/":
+    if package_manifest.get("skills") != "./skills/":
         errors.append(
             "plugins/engineering-design/plugin.json: skills must point to "
-            "./../../skills/"
+            "./skills/"
         )
 
     for label, manifest in (
@@ -245,15 +278,43 @@ def validate_manifests(errors: list[str]) -> None:
 
     plugin_root = REPO_ROOT / "plugins" / "engineering-design"
     skills_target = (plugin_root / package_manifest["skills"]).resolve()
-    if skills_target != (REPO_ROOT / "skills").resolve():
-        errors.append("packaged plugin does not resolve to root skills/")
-    for duplicate in (
-        REPO_ROOT / ".agents" / "plugins" / "engineering-design" / "skills",
+    if skills_target != (plugin_root / "skills").resolve():
+        errors.append("packaged plugin does not resolve to packaged skills/")
+
+    validate_synced_tree(
+        REPO_ROOT / "skills",
         plugin_root / "skills",
-    ):
-        if duplicate.exists():
+        "plugins/engineering-design/skills",
+        errors,
+    )
+    validate_synced_tree(
+        REPO_ROOT / "templates",
+        plugin_root / "templates",
+        "plugins/engineering-design/templates",
+        errors,
+    )
+    packaged_scripts = {
+        path.name
+        for path in (plugin_root / "scripts").glob("*.py")
+        if path.is_file()
+    }
+    if packaged_scripts != PACKAGED_RUNTIME_SCRIPTS:
+        errors.append(
+            "plugins/engineering-design/scripts: expected "
+            f"{sorted(PACKAGED_RUNTIME_SCRIPTS)}, found "
+            f"{sorted(packaged_scripts)}"
+        )
+    for name in sorted(PACKAGED_RUNTIME_SCRIPTS):
+        if (REPO_ROOT / "scripts" / name).read_bytes() != (
+            plugin_root / "scripts" / name
+        ).read_bytes():
             errors.append(
-                f"{duplicate.relative_to(REPO_ROOT)} duplicates skill sources"
+                f"plugins/engineering-design/scripts/{name}: stale packaged file"
+            )
+    for name in (".python-version", "pyproject.toml", "uv.lock"):
+        if (REPO_ROOT / name).read_bytes() != (plugin_root / name).read_bytes():
+            errors.append(
+                f"plugins/engineering-design/{name}: stale packaged file"
             )
 
     project = tomllib.loads(
@@ -276,6 +337,8 @@ def validate_ci(errors: list[str]) -> None:
         "push:",
         "contents: read",
         "uv sync --frozen",
+        "scripts/sync_codex_plugin_package.py",
+        "git diff --exit-code",
         "scripts/validate_release.py",
         "python -m unittest discover -s tests",
     ):

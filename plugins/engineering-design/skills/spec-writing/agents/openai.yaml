@@ -1,0 +1,4 @@
+interface:
+  display_name: "Engineering Specification"
+  short_description: "Turn needs into traceable, testable specifications."
+  default_prompt: "Use $spec-writing to turn this engineering request into a traceable Markdown specification with verification criteria."

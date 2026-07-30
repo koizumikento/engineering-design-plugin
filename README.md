@@ -41,21 +41,31 @@ ngspice --version
 
 ## Codex plugin
 
-repo-local marketplaceは `.agents/plugins/marketplace.json` です。entryは `plugins/engineering-design` を指し、そのmanifestがrepo rootの `skills/` を参照します。client別のskillコピーやsymlinkは置きません。
+repo-local marketplaceは `.agents/plugins/marketplace.json` です。entryは自己完結した `plugins/engineering-design` パッケージを指します。編集元はrepo rootの `skills/`、`scripts/`、`templates/` で、`scripts/sync_codex_plugin_package.py` が配布用パッケージを同期します。
 
 ```text
 .agents/plugins/marketplace.json
         -> plugins/engineering-design/.codex-plugin/plugin.json
-        -> skills/
+        -> plugins/engineering-design/skills/
 ```
 
 - plugin manifest: `plugins/engineering-design/.codex-plugin/plugin.json`
 - installer互換manifest: `plugins/engineering-design/plugin.json`
 - source of truth: `skills/`
 
+GitHub marketplaceとして登録する場合:
+
+```bash
+codex plugin marketplace add https://github.com/koizumikento/engineering-design-plugin.git \
+  --ref main \
+  --sparse .agents/plugins \
+  --sparse plugins/engineering-design
+codex plugin add engineering-design@engineering-design
+```
+
 Plugin Directoryで `Engineering Design` をinstallまたは再installし、新しいtaskで更新後のskillsを試してください。
 
-Plugin release versionは2.1.0です。Python helper projectの0.3.0とは役割が異なり、`scripts/validate_release.py`がmanifest、marketplace、skill source-of-truthをまとめて検証します。
+Plugin release versionは2.1.1です。Python helper projectの0.3.0とは役割が異なり、`scripts/validate_release.py`がmanifest、marketplace、skill source-of-truthをまとめて検証します。
 
 ## Workflow
 

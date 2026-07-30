@@ -1,0 +1,4 @@
+interface:
+  display_name: "PCB-Enclosure Integration"
+  short_description: "Check PCB, enclosure, mounting, access, and interfaces."
+  default_prompt: "Use $integration to validate the PCB-enclosure interfaces and produce an evidence-backed integration report."
