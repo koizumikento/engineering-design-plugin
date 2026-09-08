@@ -89,7 +89,7 @@ uv run python scripts/preview_generator.py outputs/input.step -o outputs/ --all-
 Shape validity, dimensions, topology, visible geometry, assembly transform, tolerance stack, and process-specific constraints are separate checks. build123d joints resolve source placement; exported STEP is not assumed to preserve a live constraint.
 
 `scripts/cad_inspect.py` is the read-only STEP inspection entrypoint. It
-provides `refs`, `measure`, `align`, `frame`, and `diff`; JSON is the canonical
+provides `refs`, `measure`, `clearance`, `align`, `frame`, and `diff`; JSON is the canonical
 output. Occurrence, solid, face, and edge selectors are local to one artifact
 and must be rediscovered after topology changes. `cad_expectations` remains the
 source-authored stable contract, while selector-based inspection remains a
@@ -113,7 +113,7 @@ Outputs:
 
 - SKiDL Python as logical design definition
 - BOM, SKiDL ERC and design summary
-- KiCad 9 schematic/project for review and PCB handoff
+- KiCad 9/10 schematic/project for review and PCB handoff
 - optional netlist and simulation evidence
 
 Checks:
@@ -125,7 +125,13 @@ uv run python skills/circuit-design/scripts/kicad_sch_export.py input.py -o outp
 kicad-cli sch erc --exit-code-violations --format json -o outputs/reports/project-kicad-erc.json outputs/kicad/project/project.kicad_sch
 ```
 
-The custom exporter has bounded topology coverage. SKiDL native `generate_schematic()` is a current alternative. Both require visual and KiCad ERC review.
+SKiDL 2.3.0 native `generate_schematic()` is the default. `--kicad-version`
+selects 9 (default) or 10; source libraries must match. The bounded old exporter
+is opt-in with `--backend compatibility` and supports KiCad 9 only. No silent
+fallback is allowed. Independent KiCad ERC, connectivity/BOM comparison, and
+visual review remain necessary; unavailable checks are `NOT_EVALUATED`.
+See `skills/circuit-design/references/kicad-workflow.md`. ERC errors in the logical
+runner preserve reports and exit with code 2.
 
 ### `integration`
 
@@ -145,7 +151,15 @@ Text screening:
 uv run python scripts/integration_checker.py specs/project-integrated-spec.md -o outputs/ --json
 ```
 
-The checker evaluates parsed nominal dimensions only. 3D collision/minimum-gap, dynamic/service envelopes, worst-case tolerance, thermal, EMC/ESD, vibration, ingress, and compliance require additional methods.
+The checker evaluates parsed nominal dimensions only, including separate upper
+and lower component clearances. Missing lower-side height is not assumed zero.
+Static 3D solid minimum-gap/interference is available through
+`scripts/cad_inspect.py clearance` on a common-frame STEP assembly. It uses true
+shape distance and volumetric intersection, not reference-point distance. See
+`skills/integration/references/geometry-checks.md` and
+`examples/pcb-enclosure-clearance/src/clearance_assembly.py`. Dynamic/service
+envelopes, worst-case tolerance, thermal, EMC/ESD, vibration, ingress, and compliance
+still require additional methods.
 
 ## Artifact ownership
 
@@ -169,7 +183,10 @@ Do not edit two supposed sources of truth independently. If generated KiCad or C
 - Label calculations and inferences separately from source facts.
 - Cite exact MPN documentation for pinout, footprint, thermal, stability, opening, and mating geometry.
 
-Current source families used by references include build123d official docs, SKiDL official docs, KiCad 9 docs, ngspice/PySpice docs, NASA Systems Engineering Handbook, and JSA/IEC official standards catalogs.
+Current source families used by references include build123d 0.11.1 documentation,
+SKiDL 2.3.0 documentation, KiCad 9/10 docs, ngspice/PySpice docs, NASA Systems
+Engineering Handbook, and JSA/IEC official standards catalogs. Stable web aliases
+must be checked against the installed runtime and fixed release sources.
 
 ## Plugin packaging
 
@@ -191,6 +208,10 @@ Plugin metadata is presentation/install information only. Operational instructio
 
 ## Validation
 
+Each skill also owns `evals/evals.json` with representative and boundary prompts,
+observable assertions, and input-file references. The release validator checks
+this corpus; actual old/new behavior comparisons follow [skill evaluation](skill-evaluation.md).
+
 For every skill change:
 
 1. run `uv sync --frozen`;
@@ -203,7 +224,7 @@ For every skill change:
 8. review `git diff` for unintended copied workflow logic.
 
 The repository-local release validator is the CI source of truth for all four
-skill folders, relative Markdown links, plugin 2.1.1 manifests, marketplace
+skill folders, relative Markdown links, plugin 2.2.0 manifests, marketplace
 sources, and exact synchronization of the packaged runtime files. It does not depend
 on a local Codex installation. GitHub Actions uses only `contents: read`,
 installs the frozen Python 3.11 environment, and runs the same validator and

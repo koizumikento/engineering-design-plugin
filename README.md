@@ -12,7 +12,7 @@
 |---|---|---|
 | `spec-writing` | 要求抽出、ID、根拠、interface、検証計画 | `specs/*.md` |
 | `mechanical-cad` | build123d部品・アセンブリ、STEP-first検証 | `.py`, STEP, STL, PNG, JSON report |
-| `circuit-design` | SKiDL回路、BOM/ERC、KiCad 9、任意simulation | `.py`, BOM, ERC, `.kicad_sch`, simulation |
+| `circuit-design` | SKiDL回路、BOM/ERC、KiCad 9/10、任意simulation | `.py`, BOM, ERC, `.kicad_sch`, simulation |
 | `integration` | PCB・筐体の座標、取付、開口、envelope整合 | integration report |
 
 設計値は承認済み仕様、メーカー一次資料、現行規格、工程能力の順に根拠を持たせます。genericな肉厚、穴径、開口、pull-up、decoupling値を規格値として扱いません。
@@ -23,7 +23,7 @@
 
 - `uv`
 - Python 3.11.x（repository default: 3.11.4）
-- KiCad 9（KiCad schematic validationを行う場合）
+- KiCad 9または10と対応するsymbol/footprint libraries（回路図生成・独立検証を行う場合）
 - ngspice（SPICE analysisを行う場合）
 - optional: VTK（PNG preview）
 
@@ -31,11 +31,18 @@
 uv sync
 ```
 
+日本語WindowsではSKiDL 2.3.0のsource buildをUTF-8で実行します。
+
+```powershell
+$env:PYTHONUTF8 = '1'
+uv sync --frozen
+```
+
 環境確認:
 
 ```bash
 uv run python -c "import build123d, skidl; print(build123d.__version__, skidl.__version__)"
-kicad-cli --version
+kicad-cli version
 ngspice --version
 ```
 
@@ -65,7 +72,7 @@ codex plugin add engineering-design@engineering-design
 
 Plugin Directoryで `Engineering Design` をinstallまたは再installし、新しいtaskで更新後のskillsを試してください。
 
-Plugin release versionは2.1.1です。Python helper projectの0.3.0とは役割が異なり、`scripts/validate_release.py`がmanifest、marketplace、skill source-of-truthをまとめて検証します。
+Plugin release versionは2.2.0です。Python helper projectの0.3.0とは役割が異なり、`scripts/validate_release.py`がmanifest、marketplace、skill source-of-truthをまとめて検証します。
 
 ## Workflow
 
@@ -111,7 +118,9 @@ uv run python skills/circuit-design/scripts/skidl_runner.py input.py -o outputs/
 uv run python skills/circuit-design/scripts/kicad_sch_export.py input.py -o outputs/
 ```
 
-repository exporterは確認済みtopology向けです。一般回路ではSKiDL 2.2の `generate_schematic()` も候補にし、生成後にKiCad 9で独立検証します。
+SKiDL 2.3.0のnative `generate_schematic()` が既定です。runner/exporterの対象は既定でKiCad 9、10には `--kicad-version 10` を明示します。source/libraryも同じ版に合わせます。確認済みtopology向けの旧exporterは `--backend compatibility` で利用できます。詳細は `skills/circuit-design/references/kicad-workflow.md` を参照してください。
+
+ERCエラー時、runnerはレポートを保存して終了コード2を返します。生成後は対象KiCadで独立ERC、BOM/接続照合、視覚確認を実施します。CLI未導入・未実行は `NOT_EVALUATED` です。
 
 ```bash
 kicad-cli sch erc --exit-code-violations --format json -o outputs/reports/project-kicad-erc.json outputs/kicad/project/project.kicad_sch
@@ -140,7 +149,16 @@ CLI overrideは承認済み要求または明記した工程仮定から与え�
 uv run python scripts/integration_checker.py specs/project-integrated-spec.md -o outputs/ --clearance 1.2 --z-clearance 1.0 --tolerance 0.25 --fail-on-fail
 ```
 
-checkerはMarkdownの公称寸法screeningです。3D interference、最悪公差、plug/latch/cable/tool envelope、thermal、EMC/ESD、IP testを評価しません。未評価項目はreportに残ります。
+checkerはMarkdownの公称寸法screeningで、上面・下面のクリアランスを別々に判定します。下面部品がない場合は高さ0を明記してください。3D interference、最悪公差、plug/latch/cable/tool envelope、thermal、EMC/ESD、IP testは評価しません。
+
+STEPの静的干渉・最小隙間は既存のinspection CLIで別途検証できます。`measure` の参照点間距離とは異なり、solid間の最小距離と体積干渉を判定します。
+
+```bash
+uv run python scripts/cad_runner.py examples/pcb-enclosure-clearance/src/clearance_assembly.py -o outputs/clearance/ --report --fail-on-check
+uv run python scripts/cad_inspect.py clearance outputs/clearance/clearance_assembly.step --from 'label:bottom_component' --to 'label:enclosure' --minimum 1
+```
+
+KiCad PCBのSTEP出力・共通座標化・上下面の実行例は `skills/integration/references/geometry-checks.md` を参照してください。
 
 ## Repository layout
 
@@ -168,6 +186,7 @@ engineering-design-plugin/
 
 - `examples/calibration-block`: build123d validation/report/preview
 - `examples/build123d-enclosure-assembly`: build123d named-joint assembly and STEP reimport validation
+- `examples/pcb-enclosure-clearance`: PCB上下部品・筐体・蓋のstatic clearance/interference
 - `examples/sensor-enclosure`: enclosure model
 - `examples/voltage-divider`, `rc-lowpass-filter`: passive circuit examples
 - `examples/non-inverting-amplifier`, `inverting-amplifier`: op-amp examples
@@ -192,9 +211,12 @@ PRと`main` pushでは、read-onlyのGitHub Actionsがlocked Python 3.11環境�
 
 ```bash
 uv sync --frozen
+uv run python scripts/sync_codex_plugin_package.py
 uv run python scripts/validate_release.py
 uv run python -m unittest discover -s tests
 ```
+
+4スキルの代表例・境界例は `skills/*/evals/evals.json` に保持します。旧版/新版の比較方法と証拠の記録は [スキル評価手順](docs/skill-evaluation.md) を参照してください。構造検証の成功だけで生成品質の改善を主張しません。
 
 ## References
 

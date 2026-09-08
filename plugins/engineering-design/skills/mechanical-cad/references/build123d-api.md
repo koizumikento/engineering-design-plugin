@@ -2,6 +2,12 @@
 
 Read this reference when writing or repairing any mechanical CAD source.
 
+The runtime is pinned to 0.11.1. Stable documentation below was checked as
+0.11.1 on 2026-09-08. Check the displayed version before copying an API: `stable`
+can move. Use the [v0.11.1 documentation source](https://github.com/gumyr/build123d/tree/v0.11.1/docs)
+and the installed runtime when newer documentation differs. Do not use `latest`
+development APIs without a separately validated runtime upgrade.
+
 ## API style
 
 Use Algebra mode by default when explicit object construction, Boolean
@@ -127,8 +133,8 @@ failure. Do not suppress the error or export a known-invalid result.
 
 ## Primary references
 
-- [build123d introduction](https://build123d.readthedocs.io/en/latest/introduction.html)
-- [Builder mode](https://build123d.readthedocs.io/en/latest/key_concepts_builder.html)
-- [Algebra mode](https://build123d.readthedocs.io/en/latest/key_concepts_algebra.html)
-- [build123d joints](https://build123d.readthedocs.io/en/latest/joints.html)
-- [build123d import/export](https://build123d.readthedocs.io/en/latest/import_export.html)
+- [build123d introduction](https://build123d.readthedocs.io/en/stable/introduction.html)
+- [Builder mode](https://build123d.readthedocs.io/en/stable/key_concepts_builder.html)
+- [Algebra mode](https://build123d.readthedocs.io/en/stable/key_concepts_algebra.html)
+- [build123d joints](https://build123d.readthedocs.io/en/stable/joints.html)
+- [build123d import/export](https://build123d.readthedocs.io/en/stable/import_export.html)

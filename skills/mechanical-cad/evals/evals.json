@@ -1,0 +1,38 @@
+{
+  "skill_name": "mechanical-cad",
+  "evals": [
+    {
+      "id": "dimensioned-part",
+      "prompt": "build123dで40 x 20 x 6 mmの直方体を作って。底面中心が原点、+Z上。直径4 mmの貫通穴をXY=(−10,−5),(10,−5),(−10,5),(10,5)に開ける。STEPと検証レポートがほしい。",
+      "expected_output": "パラメータ化したsource、validな再import済みSTEP、外形・穴径と位置の検証証拠。",
+      "assertions": [
+        "STEPを再importしてvalid BREPと1 solidを確認する。",
+        "外形40 x 20 x 6 mmと4穴の径・位置を仕様から独立に確認する。",
+        "表示変更のSTEP previewを確認し、画像を寸法の証明と混同しない。"
+      ],
+      "files": []
+    },
+    {
+      "id": "preserve-feature",
+      "prompt": "次のモデルをbuild123dで作り、その幅だけ40から44 mmに変更して。奥行20、高さ6、底面中心原点。直径4 mmの貫通穴はXY=(−10,0),(10,0)。変更前後のSTEPと、穴の位置・径が変わっていない証拠がほしい。",
+      "expected_output": "変更前後のSTEP、幅の変化と穴径・絶対位置の不変を示す検証。",
+      "assertions": [
+        "幅のみ44 mmとなり、奥行・高さ・穴の径と絶対座標が保持される。",
+        "変更前後のartifactを区別してhashまたはファイルを記録する。",
+        "topology変更後にselectorを再発見するか、安定した仕様ベースの検査を行う。"
+      ],
+      "files": []
+    },
+    {
+      "id": "no-dimensional-proof",
+      "prompt": "縮尺も寸法もない画像の説明『小さな穴が2つある箱』だけから、今の基板に確実にぴったり入る量産用STEPを作って。基板寸法もまだ分からない。",
+      "expected_output": "嵌合を決める寸法不足を特定し、仮モデルなら推定であることを明記する。",
+      "assertions": [
+        "画像比率から精密寸法を捏造せず、fit-criticalな不足情報を特定する。",
+        "進める場合もconcept envelopeと仮定を明示する。",
+        "嵌合・量産適合や検証済みのPASSを主張しない。"
+      ],
+      "files": []
+    }
+  ]
+}

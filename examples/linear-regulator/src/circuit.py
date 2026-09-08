@@ -32,7 +32,7 @@ VOUT_NOM = 5.0
 IOUT_TARGET_MA = 100
 
 
-set_default_tool(KICAD)
+set_default_tool(KICAD9)
 default_circuit.name = PROJECT_NAME
 
 # -----------------------------------------------------------------------------

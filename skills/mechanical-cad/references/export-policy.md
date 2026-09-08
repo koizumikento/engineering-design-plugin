@@ -21,4 +21,4 @@
 
 STL/3MFのtoleranceは「小さいほど常によい」ではない。過密meshは計算量を増やし、粗いmeshは曲面・小穴を損なう。部品スケールと最小曲率に合わせ、代表断面を確認する。
 
-build123dが現在対応する形式と引数は[公式Import/Export資料](https://build123d.readthedocs.io/en/latest/import_export.html)で確認する。runnerが未対応の形式をSKILL.mdで生成済みと主張しない。
+build123dが現在対応する形式と引数は[公式Import/Export資料](https://build123d.readthedocs.io/en/stable/import_export.html)で確認する。runnerが未対応の形式をSKILL.mdで生成済みと主張しない。

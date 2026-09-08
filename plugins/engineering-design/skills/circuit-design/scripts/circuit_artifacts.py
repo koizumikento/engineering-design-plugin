@@ -57,7 +57,8 @@ def find_related_spec(script_path: Path) -> Path | None:
 
 
 def write_erc_summary(output_path: Path, erc_result: dict) -> str:
-    status = "PASSED" if erc_result.get("passed") else "FAILED"
+    state = erc_result.get("passed")
+    status = "SKIPPED" if state is None else "PASSED" if state else "FAILED"
     warnings = erc_result.get("warnings", [])
     errors = erc_result.get("errors", [])
 
@@ -85,7 +86,7 @@ def write_erc_summary(output_path: Path, erc_result: dict) -> str:
         lines.append("")
 
     if not warnings and not errors:
-        lines.append("No ERC warnings or errors.")
+        lines.append("ERC was not run." if state is None else "No ERC warnings or errors.")
         lines.append("")
 
     output_path.write_text("\n".join(lines), encoding="utf-8")
@@ -106,7 +107,7 @@ def read_erc_summary(summary_path: Path) -> dict:
     for raw_line in summary_path.read_text(encoding="utf-8").splitlines():
         line = raw_line.strip()
         if line.startswith("- Status:"):
-            result["passed"] = "`PASSED`" in line
+            result["passed"] = None if "`SKIPPED`" in line else "`PASSED`" in line
         elif line == "## Warnings":
             section = "warnings"
         elif line == "## Errors":

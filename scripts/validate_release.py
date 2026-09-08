@@ -12,7 +12,7 @@ from urllib.parse import unquote
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_PLUGIN_VERSION = "2.1.1"
+EXPECTED_PLUGIN_VERSION = "2.2.0"
 EXPECTED_PROJECT_VERSION = "0.3.0"
 EXPECTED_SKILLS = {
     "circuit-design",
@@ -105,6 +105,42 @@ def parse_frontmatter(path: Path) -> dict[str, str]:
     return fields
 
 
+def validate_evals(skill_dir: Path, errors: list[str]) -> None:
+    path = skill_dir / "evals" / "evals.json"
+    payload = load_json(path)
+    cases = payload.get("evals")
+    if payload.get("skill_name") != skill_dir.name or not isinstance(cases, list) or not cases:
+        errors.append(f"{skill_dir.name}: invalid skill evaluation corpus")
+        return
+    ids = set()
+    for case in cases:
+        if not isinstance(case, dict):
+            errors.append(f"{skill_dir.name}: evaluation case must be an object")
+            continue
+        for key in ("id", "prompt", "expected_output"):
+            if not isinstance(case.get(key), str) or not case[key].strip():
+                errors.append(f"{skill_dir.name}: evaluation requires nonempty {key}")
+        case_id = case.get("id")
+        if isinstance(case_id, str):
+            if case_id in ids:
+                errors.append(f"{skill_dir.name}: duplicate evaluation ID {case_id}")
+            ids.add(case_id)
+        assertions = case.get("assertions")
+        if not isinstance(assertions, list) or not assertions or any(not isinstance(item, str) or not item.strip() for item in assertions):
+            errors.append(f"{skill_dir.name}/{case_id}: nonempty assertions required")
+        files = case.get("files")
+        if not isinstance(files, list):
+            errors.append(f"{skill_dir.name}/{case_id}: files must be a list")
+            continue
+        for name in files:
+            if not isinstance(name, str):
+                errors.append(f"{skill_dir.name}/{case_id}: input path must be a string")
+                continue
+            target = (skill_dir / name).resolve()
+            if Path(name).is_absolute() or not target.is_relative_to(skill_dir.resolve()) or not target.is_file():
+                errors.append(f"{skill_dir.name}/{case_id}: invalid input file {name!r}")
+
+
 def validate_skills(errors: list[str]) -> None:
     skills_root = REPO_ROOT / "skills"
     actual_skills = {
@@ -118,6 +154,10 @@ def validate_skills(errors: list[str]) -> None:
 
     for skill_name in sorted(actual_skills):
         skill_dir = skills_root / skill_name
+        try:
+            validate_evals(skill_dir, errors)
+        except ValidationError as exc:
+            errors.append(str(exc))
         skill_file = skill_dir / "SKILL.md"
         agent_file = skill_dir / "agents" / "openai.yaml"
         if not skill_file.is_file():

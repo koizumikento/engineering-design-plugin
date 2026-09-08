@@ -1,4 +1,4 @@
-# SKiDL 2.2 / KiCad 9 実装リファレンス
+# SKiDL 2.3.0 / KiCad 9・10 実装リファレンス
 
 ## 目次
 
@@ -6,13 +6,13 @@ Version / Circuit ownership / Parts / Nets / Hierarchy / ERC / Outputs / Officia
 
 ## Version and tool
 
-現在のlockはSKiDL 2.2.1で、公式サイトは2.2.3系の資料を公開している。APIを使う前に実行版を確認する。
+現在のlockはSKiDL 2.3.0。KiCad 9向けnative schematic生成は2.2.2以降の機能であり、2.2.1では生成されない。APIを使う前に実行版を確認する。
 
 ```bash
 uv run python -c "import skidl; print(skidl.__version__)"
 ```
 
-SKiDL 2.2の `KICAD` aliasは現在KiCad 9を指すが、成果物の互換性を固定したいコードでは `KICAD9` を明示する。
+SKiDL 2.3.0の `KICAD` aliasはKiCad 10を指す。成果物の互換性を固定するため、`KICAD9` または `KICAD10` を明示する。runner/exporterの既定は9で、10向けには `--kicad-version 10` を使う。source内のtool指定とsymbol libraryも同じ版へ合わせる。日本語Windowsで依存のbuildが文字コードエラーになる場合、PowerShellで `$env:PYTHONUTF8 = '1'` を設定してから `uv sync --frozen` を実行する。
 
 ## Circuit ownership
 
@@ -117,3 +117,5 @@ legacy netlistは下流が要求する場合だけ `--netlist` で追加する�
 - [SKiDL documentation](https://devbisme.github.io/skidl/)
 - [SKiDL Circuit API](https://devbisme.github.io/skidl/api/html/rst_output/skidl.circuit.html)
 - [KiCad 9 documentation](https://docs.kicad.org/9.0/en/)
+- [KiCad 10 documentation](https://docs.kicad.org/10.0/en/)
+- [SKiDL release history](https://pypi.org/project/skidl/#history) — compatibility claims checked on 2026-09-08.

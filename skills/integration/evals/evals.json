@@ -1,0 +1,38 @@
+{
+  "skill_name": "integration",
+  "evals": [
+    {
+      "id": "bottom-interference",
+      "prompt": "統合仕様を作り標準checkerで検証して。基板40 x 20 x 1.6 mm、上面部品高6 mm、下面部品高6 mm、筐体内寸44 x 24 x 13 mm、ボス高4 mm。上下面と外周の必要隙間は各1 mm。穴とボスは共通座標で(−15,−5),(15,5)、位置許容差0.2 mm。",
+      "expected_output": "下面の公称隙間−2 mmをFAILとし、総合FAIL・非ゼロ終了を確認する。",
+      "assertions": [
+        "下面高さと必要下面クリアランスを判定に用いる。",
+        "下面干渉をFAILと報告し、--fail-on-failで非ゼロ終了を確認する。",
+        "公称screeningを3D検証や最悪公差解析済みと主張しない。"
+      ],
+      "files": []
+    },
+    {
+      "id": "missing-bottom-data",
+      "prompt": "基板40 x 20 x 1.6 mm、上面部品高6 mm、筐体内寸44 x 24 x 13 mm、ボス高4 mmで収納可能か確認して。下面部品の有無・高さ、必要な隙間、公差、穴位置は未確認。",
+      "expected_output": "可能な公称計算と未評価事項を分け、下面高さをゼロと仮定しない。",
+      "assertions": [
+        "下面クリアランスをNOT_EVALUATEDとする。",
+        "必要隙間・公差がない状態を総合PASSとしない。",
+        "次に必要な下面部品・取付・要求値の情報を特定する。"
+      ],
+      "files": []
+    },
+    {
+      "id": "solid-gap",
+      "prompt": "build123dの2 mm角Boxを2つ、中心(0,0,0)と(3,0,0)に置いたSTEP assemblyを作って。labelはa,b。両者間の必要最小隙間は1.1 mm。実際のsolid間距離で判定し、STEPは検証時に変更しないで。",
+      "expected_output": "最小隙間1 mmでFAIL。中心間距離3 mmをクリアランスと扱わない。",
+      "assertions": [
+        "clearanceまたは同等の独立shape距離測定で1 mmを得る。",
+        "要求1.1 mmに対してFAILを報告する。",
+        "STEPのhashが検証前後で変わらず、静的solid検証の範囲を明示する。"
+      ],
+      "files": []
+    }
+  ]
+}

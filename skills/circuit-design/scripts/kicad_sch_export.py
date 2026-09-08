@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """
-KiCad v9 schematic exporter for SKiDL circuits.
-
-The current implementation emits KiCad-native .kicad_sch / .kicad_pro files
-for the non-inverting amplifier example and validates cleanly with kicad-cli.
+SKiDL native KiCad 9/10 export with a bounded KiCad 9 compatibility backend.
 """
 
 import argparse
 import json
+import shutil
 import sys
+import tempfile
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -4726,13 +4725,37 @@ def write_project_file(output_path: Path) -> str:
     return str(output_path)
 
 
+def export_native_schematic(circuit, output_path: Path, tool: str) -> list[str]:
+    # Stage each run so a stale schematic cannot make a no-output run succeed.
+    with tempfile.TemporaryDirectory(prefix="skidl-schematic-") as directory:
+        stage = Path(directory)
+        circuit.generate_schematic(
+            # SKiDL strips one suffix from top_name, including dotted basenames.
+            filepath=str(stage), top_name=output_path.name, tool=tool,
+        )
+        generated = stage / output_path.name
+        if not generated.is_file() or generated.stat().st_size == 0:
+            raise RuntimeError("SKiDL did not generate the requested schematic")
+        files = []
+        for source in sorted(stage.rglob("*.kicad_sch")):
+            destination = output_path.parent / source.relative_to(stage)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, destination)
+            files.append(str(destination))
+        return files
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Export KiCad v9-native schematic/project files from a SKiDL script.")
+    parser = argparse.ArgumentParser(description="Export KiCad schematic/project files from a SKiDL script.")
     parser.add_argument("script", type=Path, help="Input SKiDL script")
     parser.add_argument("-o", "--output", type=Path, default=Path("outputs"), help="Output directory")
     parser.add_argument("--name", type=str, default=None, help="Base filename for generated KiCad files")
     parser.add_argument("--json", action="store_true", help="Print result metadata as JSON")
+    parser.add_argument("--backend", choices=("native", "compatibility"), default="native")
+    parser.add_argument("--kicad-version", type=int, choices=(9, 10), default=9)
     args = parser.parse_args()
+    if args.backend == "compatibility" and args.kicad_version != 9:
+        parser.error("the compatibility backend supports KiCad 9 only")
 
     if not args.script.exists():
         print(f"Error: Script not found: {args.script}", file=sys.stderr)
@@ -4745,37 +4768,41 @@ def main():
         "script": str(args.script),
         "output_dir": str(args.output),
         "exported_files": [],
+        "backend": args.backend,
+        "kicad_version": args.kicad_version,
+        "kicad_erc": "NOT_EVALUATED; run independent kicad-cli sch erc",
     }
 
     try:
         report_dir, project_dir = ensure_standard_output_dirs(args.output, base_name)
-        configure_kicad_env()
+        configure_kicad_env(args.kicad_version)
 
         try:
-            from skidl import KICAD, set_default_tool
+            from skidl import KICAD9, KICAD10, set_default_tool
 
-            set_default_tool(KICAD)
+            tool = KICAD9 if args.kicad_version == 9 else KICAD10
+            set_default_tool(tool)
             suppress_skidl_file_output()
         except ImportError:
             print("Error: SKiDL is not installed. Run: uv sync", file=sys.stderr)
             sys.exit(1)
 
         circuit = load_skidl_circuit(args.script)
-        circuit_info = analyze_circuit(circuit)
-        design = identify_supported_design(circuit_info)
-        if not design:
-            raise ValueError(
-                "KiCad schematic export could not map this circuit to a supported topology. "
-                "Supported topology families currently include the comet LED sequencer, voltage-divider, "
-                "rc-lowpass, L7805 linear regulator, and TL072 inverting/non-inverting amplifiers."
-            )
+        set_default_tool(tool)
 
         schematic_path = project_dir / f"{base_name}.kicad_sch"
         project_path = project_dir / f"{base_name}.kicad_pro"
 
-        export_supported_design(design, schematic_path)
+        if args.backend == "native":
+            result["exported_files"].extend(export_native_schematic(circuit, schematic_path, tool))
+        else:
+            design = identify_supported_design(analyze_circuit(circuit))
+            if not design:
+                raise ValueError("Circuit is outside the compatibility backend's supported topologies; use --backend native")
+            export_supported_design(design, schematic_path)
+            result["exported_files"].append(str(schematic_path))
         write_project_file(project_path)
-        result["exported_files"].extend([str(schematic_path), str(project_path)])
+        result["exported_files"].append(str(project_path))
 
         summary_path = report_dir / f"{base_name}-design-summary.md"
         erc_summary_path = report_dir / f"{base_name}-erc-summary.md"

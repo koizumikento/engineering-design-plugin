@@ -228,7 +228,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=1.20" },
     { name = "numpy-stl", specifier = ">=2.16" },
     { name = "pyspice", specifier = ">=1.5" },
-    { name = "skidl", specifier = ">=2.2.1,<2.3" },
+    { name = "skidl", specifier = "==2.3.0" },
     { name = "vtk", marker = "extra == 'preview'", specifier = ">=9.0" },
 ]
 
@@ -885,7 +885,7 @@ wheels = [
 
 [[package]]
 name = "skidl"
-version = "2.2.1"
+version = "2.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "deprecation" },
@@ -896,7 +896,7 @@ dependencies = [
     { name = "rich" },
     { name = "simp-sexp" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/25/c4/5074d5ef85089f2a79df1972445e505e24811fd4f281cb56cd043fb211db/skidl-2.2.1.tar.gz", hash = "sha256:7522983b575855f9506a4c8aa0563032b150b4dcfee57b71c28a4e6a5179b7d4", size = 4041634 }
+sdist = { url = "https://files.pythonhosted.org/packages/da/9c/95a0279c5ec810cf78e922366ad7e17dbf91f3d7956a577609c51ceea5d4/skidl-2.3.0.tar.gz", hash = "sha256:f3f14ac02ff07e426111aebd8a659a52ce19cfb398cf103cc82473227dcb1af0", size = 4230573 }
 
 [[package]]
 name = "stack-data"

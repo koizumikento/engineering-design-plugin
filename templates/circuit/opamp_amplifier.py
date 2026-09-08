@@ -55,7 +55,7 @@ print(f"実際のゲイン: {actual_gain:.2f}")
 # 回路定義
 # =============================================================================
 
-set_default_tool(KICAD)
+set_default_tool(KICAD9)
 
 # ネット定義
 vin = Net('VIN')

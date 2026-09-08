@@ -1,6 +1,6 @@
 ---
 name: circuit-design
-description: Create, revise, execute, and validate SKiDL-based electronic circuit designs, BOM/ERC artifacts, KiCad 9 schematics, and optional ngspice/PySpice analyses. Use for component-level connectivity, power and signal conditioning, interfaces, schematic generation, or simulation planning. Do not use for PCB layout, safety/EMC certification, or production approval without the required downstream evidence.
+description: Create, revise, execute, and validate SKiDL-based electronic circuit designs, BOM/ERC artifacts, KiCad 9/10 schematics, and optional ngspice/PySpice analyses. Use for component-level connectivity, power and signal conditioning, interfaces, schematic generation, or simulation planning. Do not use for PCB layout, safety/EMC certification, or production approval without the required downstream evidence.
 ---
 
 # Circuit Design with SKiDL
@@ -19,18 +19,21 @@ description: Create, revise, execute, and validate SKiDL-based electronic circui
    uv run python skills/circuit-design/scripts/skidl_runner.py <input.py> -o <outputs/>
    ```
 
-7. Generate a KiCad 9 schematic with the repository exporter when its topology is supported:
+   Require a passing ERC result before handoff. The runner writes failure evidence and exits with code 2 on ERC errors; warnings retain their rationale. `--no-erc` is an explicit skip, not a pass.
+7. Generate a schematic through the native SKiDL 2.3.0 backend; choose the installed target version explicitly (default: 9):
 
    ```bash
    uv run python skills/circuit-design/scripts/kicad_sch_export.py <input.py> -o <outputs/>
    ```
 
-   Current SKiDL also provides `generate_schematic()` for KiCad schematics. Prefer that native path for general circuits when it produces a readable result, and treat the repository exporter as a tested compatibility path rather than claiming universal coverage.
+   Add `--kicad-version 10` to the runner and exporter for KiCad 10, and use matching libraries in source. The bounded legacy exporter is available with `--backend compatibility --kicad-version 9`; use it only for supported topologies. Do not silently fall back after native generation fails. Require the requested schematic and all referenced sheets to exist.
 8. If `kicad-cli` is available, validate the generated schematic independently:
 
    ```bash
    kicad-cli sch erc --exit-code-violations --format json -o <outputs/reports/project-kicad-erc.json> <outputs/kicad/project/project.kicad_sch>
    ```
+
+   If unavailable, report KiCad ERC as `NOT_EVALUATED`. A successful native export or its optional internal ERC is not this independent handoff check. Compare connectivity and BOM, and visually inspect the generated schematic using `references/kicad-workflow.md`.
 
 9. Run only the analyses required by the specification. Use models whose source, version, pin order, and applicability are recorded:
 
@@ -52,7 +55,7 @@ description: Create, revise, execute, and validate SKiDL-based electronic circui
 
 ## Reference routing
 
-- `references/skidl-api.md`: SKiDL 2.2/KiCad 9 patterns, Circuit ownership, tags, ERC, and outputs.
-- `references/kicad-v9-workflow.md`: native schematic validation, CLI ERC/BOM, and source-of-truth rules.
+- `references/skidl-api.md`: SKiDL 2.3.0/KiCad 9/10 patterns, Circuit ownership, tags, ERC, and outputs.
+- `references/kicad-workflow.md`: native schematic validation, CLI ERC/BOM, and source-of-truth rules.
 - `references/circuit-patterns.md`: design-review checklists and equations for common circuit classes.
 - `references/spice-guide.md`: model provenance, analysis selection, corners, measurements, and convergence.

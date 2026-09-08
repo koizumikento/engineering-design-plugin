@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import math
 import re
 import sys
 from dataclasses import asdict, dataclass, field
@@ -254,6 +255,27 @@ def check_height_clearance(
     return CheckResult("上面クリアランス", "PASS", "公称寸法で必要最小上面クリアランスを満たします", details)
 
 
+def check_bottom_clearance(
+    pcb: PCBSpec, enclosure: EnclosureSpec, required: Optional[float]
+) -> CheckResult:
+    if pcb.bottom_component_height is None or enclosure.boss_height is None:
+        return CheckResult(
+            "下面クリアランス", "NOT_EVALUATED", "下面部品高またはボス高が不足しています"
+        )
+    values = (pcb.bottom_component_height, enclosure.boss_height, required)
+    if any(value is not None and (not math.isfinite(value) or value < 0) for value in values):
+        return CheckResult("下面クリアランス", "ERROR", "高さと必要クリアランスは有限の非負値が必要です")
+    gap = enclosure.boss_height - pcb.bottom_component_height
+    details = {"bottom_gap_mm": gap, "required_mm": required}
+    if gap < 0:
+        return CheckResult("下面クリアランス", "FAIL", "公称寸法で下面部品が底面と干渉します", details)
+    if required is None:
+        return CheckResult("下面クリアランス", "CONDITIONAL", "必要最小下面クリアランスが未定義です", details)
+    if gap < required:
+        return CheckResult("下面クリアランス", "FAIL", "必要最小下面クリアランスを満たしません", details)
+    return CheckResult("下面クリアランス", "PASS", "公称寸法で必要最小下面クリアランスを満たします", details)
+
+
 def check_mounting_holes(
     pcb: PCBSpec, enclosure: EnclosureSpec, tolerance: Optional[float]
 ) -> CheckResult:
@@ -410,6 +432,7 @@ def main() -> None:
             check_required_inputs(pcb, enclosure),
             check_pcb_clearance(pcb, enclosure, criteria.xy_clearance),
             check_height_clearance(pcb, enclosure, criteria.top_clearance),
+            check_bottom_clearance(pcb, enclosure, criteria.bottom_clearance),
             check_mounting_holes(pcb, enclosure, criteria.mounting_tolerance),
             check_connector_scope(pcb),
         ]

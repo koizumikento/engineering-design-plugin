@@ -68,4 +68,4 @@ worst_case_margin = nominal_gap
 - 組立順序のdemonstration
 - 初品または治具によるtest/inspection
 
-build123dのsource-level jointは[Joints](https://build123d.readthedocs.io/en/latest/joints.html)を参照する。実装と実行方法は`references/build123d-api.md`に従う。
+build123dのsource-level jointは[Joints](https://build123d.readthedocs.io/en/stable/joints.html)を参照する。実装と実行方法は`references/build123d-api.md`に従う。
