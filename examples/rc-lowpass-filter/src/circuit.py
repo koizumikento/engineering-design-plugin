@@ -41,7 +41,7 @@ def format_resistance(value_ohms: int) -> str:
     return str(value_ohms)
 
 
-set_default_tool(KICAD)
+set_default_tool(KICAD9)
 default_circuit.name = PROJECT_NAME
 
 # -----------------------------------------------------------------------------

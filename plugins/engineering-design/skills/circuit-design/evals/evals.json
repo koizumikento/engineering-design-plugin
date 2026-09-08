@@ -1,0 +1,38 @@
+{
+  "skill_name": "circuit-design",
+  "evals": [
+    {
+      "id": "native-divider",
+      "prompt": "5 Vを抵抗10 kΩ 2本で分圧するSKiDL回路を作り、BOM・ERC結果とKiCad 9回路図を出して。外部入力・出力・GNDはコネクタで示す。負荷は無視する試作検討。",
+      "expected_output": "KICAD9を明示した回路、native schematic、BOM・ERCと未検証事項。",
+      "assertions": [
+        "公称無負荷出力2.5 Vを計算する。",
+        "標準runnerとnative exporterで今回生成された成果物の存在を確認する。",
+        "ERC結果と独立KiCad ERCの実行有無を分けて報告する。"
+      ],
+      "files": []
+    },
+    {
+      "id": "erc-error",
+      "prompt": "次のSKiDL sourceを標準runnerで実行して、ERC結果と成果物を確認して: from skidl import erc_assert; erc_assert('False', 'intentional acceptance failure')。ERCをスキップして成功扱いにはしないで。",
+      "expected_output": "ERC failureを保持したレポートと非ゼロ終了の確認。",
+      "assertions": [
+        "意図したassertionがerrorsに残り、passedはfalseになる。",
+        "runnerの非ゼロ終了を確認し、生成されたレポートを報告する。",
+        "ERC抑制や--no-ercで失敗を消さない。"
+      ],
+      "files": []
+    },
+    {
+      "id": "kicad10-without-cli",
+      "prompt": "SKiDL 2.3.0で抵抗3本の回路をKiCad 10のnative schematicへ出力する手順とsourceを書いて。symbol librariesはあるが、この環境にはkicad-cliがない。",
+      "expected_output": "KICAD10と--kicad-version 10を明示し、native出力と独立ERCの未評価を区別する。",
+      "assertions": [
+        "KICAD aliasやKiCad 9固定に依存せず、出力・source/libraryの対象版を一致させる。",
+        "KiCad 10にはcompatibility backendを使わない。",
+        "CLI ERC・接続等価性を未実施ならNOT_EVALUATEDとして残す。"
+      ],
+      "files": []
+    }
+  ]
+}

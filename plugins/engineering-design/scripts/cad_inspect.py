@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 import OCP as build123d_occt
-from build123d import CenterOf, GeomType, Shape, import_step
+from build123d import CenterOf, Compound, GeomType, Shape, import_step
 
 from cad_runner import (
     bounding_box_dict,
@@ -549,6 +549,52 @@ def inspect_measure(args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
+def inspect_clearance(args: argparse.Namespace) -> dict[str, Any]:
+    path, root, index = _load_target(args.target)
+    refs = [index.resolve(args.from_selector), index.resolve(args.to_selector)]
+    a, b = (ref.selector for ref in refs)
+    if a == b or a.startswith(b + ".") or b.startswith(a + "."):
+        raise InspectionError("clearance requires two disjoint selections, not an ancestor and its child")
+    shapes = []
+    for ref in refs:
+        if ref.kind not in {"occurrence", "solid"}:
+            raise InspectionError("clearance requires solid or component selectors")
+        value = ref.value
+        owner = index.by_selector[ref.occurrence_selector]
+        if owner.parent_selector:
+            parent = index.by_selector[owner.parent_selector].value
+            value = value.moved(parent.global_location)
+        solids = value.solids()
+        if not solids or any(not solid.is_valid or solid.volume <= 0 for solid in solids):
+            raise InspectionError("clearance requires valid positive-volume solids")
+        # Compound.intersect follows children in their local frames in 0.11.1.
+        # Flatten already positioned solids so distance and overlap use one frame.
+        shapes.append(Compound(solids))
+    left, right = shapes
+    distance = float(left.distance_to(right))
+    intersection = left.intersect(right, tolerance=args.tolerance)
+    overlap_volume = sum(solid.volume for item in (intersection or []) for solid in item.solids())
+    if not math.isfinite(distance) or not math.isfinite(overlap_volume):
+        raise InspectionError("kernel returned a non-finite clearance measurement")
+    overlaps = overlap_volume > 0
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "command": "clearance",
+        "artifact": _artifact_payload(path, root),
+        "from": index.payload(refs[0]),
+        "to": index.payload(refs[1]),
+        "clearance": {
+            "minimum_distance_mm": distance,
+            "required_minimum_mm": args.minimum,
+            "tolerance_mm": args.tolerance,
+            "overlap_volume_mm3": overlap_volume,
+            "relationship": "overlapping" if overlaps else "touching" if distance <= args.tolerance else "separated",
+            "passed": not overlaps and distance + args.tolerance >= args.minimum,
+            "scope": "selected static solid envelopes in the STEP world frame; excludes manufacturing tolerances and motion",
+        },
+    }
+
+
 def _infer_aligned_axis(*vectors: dict[str, float]) -> str:
     alignments = [_axis_alignment(vector) for vector in vectors]
     if not alignments or any(alignment is None for alignment in alignments):
@@ -879,6 +925,12 @@ def _text_output(payload: dict[str, Any]) -> str:
             f"{payload['mode']} delta={alignment['translation_delta']} "
             f"magnitude={alignment['magnitude']:.6g} {alignment['units']}"
         )
+    if command == "clearance":
+        check = payload["clearance"]
+        return (
+            f"{check['relationship']}: gap={check['minimum_distance_mm']:.6g} mm "
+            f"overlap={check['overlap_volume_mm3']:.6g} mm^3 passed={check['passed']}"
+        )
     if command == "frame":
         frame = payload["world_frame"]
         return (
@@ -930,6 +982,15 @@ def build_parser() -> argparse.ArgumentParser:
     _add_output_arguments(measure_parser)
     measure_parser.set_defaults(handler=inspect_measure)
 
+    clearance_parser = subparsers.add_parser("clearance", help="check solid minimum gap and volumetric interference")
+    clearance_parser.add_argument("target", type=Path)
+    clearance_parser.add_argument("--from", dest="from_selector", required=True)
+    clearance_parser.add_argument("--to", dest="to_selector", required=True)
+    clearance_parser.add_argument("--minimum", type=float, required=True, help="required static clearance in mm")
+    clearance_parser.add_argument("--tolerance", type=float, default=1e-6, help="numerical tolerance in mm, not a manufacturing allowance")
+    _add_output_arguments(clearance_parser)
+    clearance_parser.set_defaults(handler=inspect_clearance)
+
     align_parser = subparsers.add_parser(
         "align",
         help="compute a read-only alignment delta",
@@ -969,8 +1030,10 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Iterable[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(list(argv) if argv is not None else None)
-    if getattr(args, "tolerance", 0) < 0:
-        parser.error("--tolerance must be non-negative")
+    for field in ("tolerance", "minimum"):
+        value = getattr(args, field, 0)
+        if not math.isfinite(value) or value < 0:
+            parser.error(f"--{field} must be finite and non-negative")
     try:
         payload = args.handler(args)
     except Exception as exc:
@@ -987,7 +1050,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         if args.format == "json"
         else _text_output(payload)
     )
-    return 0
+    return 1 if args.command == "clearance" and not payload["clearance"]["passed"] else 0
 
 
 if __name__ == "__main__":

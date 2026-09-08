@@ -17,7 +17,7 @@ description: Validate mechanical-electrical interfaces between a PCB, enclosure,
    ```
 
    Pass `--clearance` and `--tolerance` only from the approved requirement or documented process assumption. The checker is a screening tool; missing data or unsupported checks must remain visible and must not become a pass.
-5. When STEP/BREP/board 3D data is available, perform geometric checks in the common frame: containment, minimum gap, mounting alignment, connector/opening overlap, component-to-lid/wall clearance, fastener/tool access, cable and user-access envelopes, and assembly path.
+5. When STEP/BREP/board 3D data is available, use `references/geometry-checks.md` to export and place it in the common frame, then check static solid clearance/interference with `scripts/cad_inspect.py clearance`. Check mounting alignment separately. Containment, openings, tool/cable access, and assembly paths require their own geometry or demonstration; leave untested items not evaluated.
 6. Review non-geometric interfaces: power/grounding, heat path, airflow, sealing surfaces, vent/sensor exposure, ESD/EMC features, labeling, serviceability, and manufacturing sequence. Route specialist analysis or testing where required.
 7. Classify every result as pass, fail, conditional, or not evaluated. Link it to the requirement and evidence; do not collapse unknowns into a single overall pass.
 8. Produce `outputs/<project>-integration-report.md` with assumptions, source revisions, coordinate convention, margins, conflicts, unsupported checks, and corrective actions.
@@ -36,4 +36,5 @@ description: Validate mechanical-electrical interfaces between a PCB, enclosure,
 ## Reference routing
 
 - Read `references/interface-spec.md` for coordinate frames, interface tables, tolerance stacks, envelopes, verification methods, and current standards-source guidance.
+- Read `references/geometry-checks.md` for PCB STEP export, common-frame assembly, executable static clearance checks, and the worked example.
 - Read the mechanical and circuit references for process-specific geometry, exact component data, schematic boundaries, or simulation evidence.

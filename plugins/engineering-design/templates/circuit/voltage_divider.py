@@ -45,7 +45,7 @@ print(f"実際のVout: {ACTUAL_VOUT:.3f}V（目標: {VOUT_VOLTAGE}V）")
 # =============================================================================
 
 # デフォルトツールをKiCADに設定
-set_default_tool(KICAD)
+set_default_tool(KICAD9)
 
 # ネット定義
 vin = Net('VIN')

@@ -10,6 +10,7 @@ SKiDL Runner - SKiDLスクリプトを実行し、BOMとサマリを出力
 import argparse
 import builtins
 import json
+import logging
 import sys
 from pathlib import Path
 import csv
@@ -22,43 +23,36 @@ from skidl_utils import load_skidl_circuit
 def run_erc() -> dict:
     """ERCを実行して結果を取得"""
     from skidl import ERC, erc_logger
-    import io
-    from contextlib import redirect_stderr
-
     result = {
         "passed": True,
         "warnings": [],
         "errors": []
     }
 
-    # ERCの出力をキャプチャ
-    stderr_capture = io.StringIO()
+    class CaptureERC(logging.Handler):
+        def emit(self, record):
+            if record.levelno >= logging.ERROR:
+                result["errors"].append(record.getMessage())
+            elif record.levelno >= logging.WARNING:
+                result["warnings"].append(record.getMessage())
+
+    # SKiDL binds its stderr handler at import time; redirect_stderr misses it.
+    capture = CaptureERC()
+    erc_logger.addHandler(capture)
     try:
-        with redirect_stderr(stderr_capture):
-            ERC()
-        result["passed"] = True
+        ERC()
     except Exception as e:
-        result["passed"] = False
         result["errors"].append(str(e))
-
-    # 警告/エラーを解析
-    erc_output = stderr_capture.getvalue()
-    for line in erc_output.split('\n'):
-        line = line.strip()
-        if not line:
-            continue
-        if 'WARNING' in line.upper():
-            result["warnings"].append(line)
-        elif 'ERROR' in line.upper():
-            result["errors"].append(line)
-            result["passed"] = False
-
+    finally:
+        erc_logger.removeHandler(capture)
+        capture.close()
+    result["passed"] = not result["errors"] and erc_logger.error.count == 0
     return result
 
 
 def generate_netlist(output_path: Path, format: str = "kicad") -> str:
     """ネットリストを生成"""
-    from skidl import generate_netlist as skidl_generate_netlist, KICAD
+    from skidl import generate_netlist as skidl_generate_netlist
 
     netlist_path = str(output_path)
 
@@ -160,6 +154,8 @@ def main():
                         help='ネットリストを追加生成する')
     parser.add_argument('--no-erc', action='store_true',
                         help='ERCをスキップ')
+    parser.add_argument('--kicad-version', type=int, choices=(9, 10), default=9,
+                        help='KiCad library/netlist target (default: 9)')
     parser.add_argument('--json', action='store_true',
                         help='結果をJSON形式で出力')
 
@@ -187,12 +183,13 @@ def main():
 
     try:
         report_dir, _ = ensure_standard_output_dirs(args.output, base_name)
-        configure_kicad_env()
+        configure_kicad_env(args.kicad_version)
 
         # SKiDLインポート確認
         try:
-            from skidl import set_default_tool, KICAD
-            set_default_tool(KICAD)
+            from skidl import set_default_tool, KICAD9, KICAD10
+            tool = KICAD9 if args.kicad_version == 9 else KICAD10
+            set_default_tool(tool)
             import builtins
 
             builtins.default_circuit._no_files = True
@@ -203,6 +200,7 @@ def main():
         # スクリプト実行
         print(f"Loading script: {args.script}")
         load_skidl_circuit(args.script)
+        set_default_tool(tool)
 
         # 回路情報取得
         circuit_info = get_circuit_info()
@@ -228,12 +226,11 @@ def main():
                 print(f"    WARNING: {warning}")
 
         # ERC summary生成
-        if not args.no_erc:
-            print("Writing ERC summary...")
-            erc_summary_path = report_dir / f"{base_name}-erc-summary.md"
-            write_erc_summary(erc_summary_path, result_data["erc"])
-            result_data["exported_files"].append(str(erc_summary_path))
-            print(f"  Created: {erc_summary_path}")
+        print("Writing ERC summary...")
+        erc_summary_path = report_dir / f"{base_name}-erc-summary.md"
+        write_erc_summary(erc_summary_path, result_data["erc"])
+        result_data["exported_files"].append(str(erc_summary_path))
+        print(f"  Created: {erc_summary_path}")
 
         # BOM生成
         if not args.no_bom:
@@ -257,8 +254,7 @@ def main():
         result_data["exported_files"].append(str(design_summary_path))
         print(f"  Created: {design_summary_path}")
 
-        # 成功
-        print("\nDone!")
+        print("\nERC failed; see reports." if result_data["erc"].get("passed") is False else "\nDone!")
 
     except Exception as e:
         result_data["errors"].append(str(e))
@@ -270,7 +266,8 @@ def main():
     # JSON出力
     if args.json:
         print(json.dumps(result_data, indent=2, ensure_ascii=False))
+    return 2 if result_data["erc"].get("passed") is False else 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

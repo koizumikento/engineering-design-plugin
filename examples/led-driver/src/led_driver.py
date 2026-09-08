@@ -48,7 +48,7 @@ print(f"実際のIf = {ACTUAL_IF*1000:.1f}mA")
 # 回路定義
 # =============================================================================
 
-set_default_tool(KICAD)
+set_default_tool(KICAD9)
 
 # ネット定義
 vcc = Net('VCC')

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import tempfile
 import unittest
@@ -10,7 +11,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-RUNTIME_PYTHON = REPO_ROOT / ".venv" / "bin" / "python"
+RUNTIME_PYTHON = REPO_ROOT / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 INSPECT = REPO_ROOT / "scripts" / "cad_inspect.py"
 
 
@@ -283,6 +284,53 @@ class CadInspectTests(unittest.TestCase):
         self.assertEqual(flush["alignment"]["translation_delta"]["z"], -4)
         self.assertTrue(flush["alignment"]["read_only"])
         self.assertEqual(self.assembly_step.read_bytes(), before_hash)
+
+    def test_clearance_measures_surfaces_and_rejects_interference(self) -> None:
+        from build123d import Box, Compound, Location, export_step
+
+        for shift, minimum, passed, relationship in (
+            (3, 1, True, "separated"),
+            (3, 1.1, False, "separated"),
+            (2, 0, True, "touching"),
+            (2, 0.1, False, "touching"),
+            (1, 0, False, "overlapping"),
+        ):
+            with self.subTest(shift=shift, minimum=minimum):
+                a = Box(2, 2, 2); a.label = "a"
+                b = Box(2, 2, 2).move(Location((shift, 0, 0))); b.label = "b"
+                step = self.output / "clearance.step"
+                export_step(Compound(children=[a, b]), step)
+                before = step.read_bytes()
+                completed = self.run_cli("clearance", step, "--from", "label:a", "--to", "label:b", "--minimum", str(minimum), check=False)
+                self.assertEqual(completed.returncode, 0 if passed else 1, completed.stderr)
+                check = json.loads(completed.stdout)["clearance"]
+                self.assertEqual(check["relationship"], relationship)
+                self.assertEqual(check["passed"], passed)
+                self.assertAlmostEqual(check["minimum_distance_mm"], max(0, shift - 2))
+                self.assertAlmostEqual(check["overlap_volume_mm3"], 4 if shift == 1 else 0)
+                self.assertEqual(step.read_bytes(), before)
+
+    def test_clearance_uses_nested_world_placement_and_checks_inputs(self) -> None:
+        from build123d import Box, Compound, Location, export_step
+
+        a = Box(2, 2, 2); a.label = "a"
+        b = Box(2, 2, 2).move(Location((1, 0, 0))); b.label = "b"
+        group = Compound(children=[b], label="group").move(Location((0, 5, 0), (0, 0, 90)))
+        step = self.output / "nested-clearance.step"
+        export_step(Compound(children=[a, group]), step)
+        for selector in ("label:b", "label:group"):
+            data = self.run_json("clearance", step, "--from", "label:a", "--to", selector, "--minimum", "4")
+            self.assertAlmostEqual(data["clearance"]["minimum_distance_mm"], 4)
+            self.assertEqual(data["clearance"]["overlap_volume_mm3"], 0)
+        for selector, minimum in (("#o1", "0"), ("label:a", "0"), ("label:b", "nan"), ("label:b", "-1")):
+            failed = self.run_cli("clearance", step, "--from", "label:a", "--to", selector, "--minimum", minimum, check=False)
+            self.assertEqual(failed.returncode, 2)
+        b = Box(2, 2, 2).move(Location((5, 0, 0))); b.label = "b"
+        group = Compound(children=[b], label="group").move(Location((-5, 0, 0)))
+        export_step(Compound(children=[a, group]), step)
+        failed = self.run_cli("clearance", step, "--from", "label:a", "--to", "label:group", "--minimum", "0", check=False)
+        self.assertEqual(failed.returncode, 1, failed.stderr)
+        self.assertAlmostEqual(json.loads(failed.stdout)["clearance"]["overlap_volume_mm3"], 8)
 
     def test_align_coaxial_returns_transverse_delta(self) -> None:
         refs = self.run_json("refs", self.multi_axis_step, "--topology")

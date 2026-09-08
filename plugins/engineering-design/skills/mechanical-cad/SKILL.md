@@ -27,7 +27,7 @@ description: Create, revise, execute, and validate parametric mechanical designs
      <input.py> -o <outputs/> --report --fail-on-check
    ```
 
-11. Inspect every generated STEP with `references/inspection-and-validation.md`. Run `refs` as the baseline, then use `measure`, `align`, `frame`, and `diff` for specification-driven facts, interfaces, transforms, and modification invariants. Rediscover artifact-local selectors after topology changes.
+11. Inspect every generated STEP with `references/inspection-and-validation.md`. Run `refs` as the baseline, then use `measure`, `clearance`, `align`, `frame`, and `diff` for specification-driven facts, interfaces, transforms, and modification invariants. Use `clearance` for true solid minimum gaps; `measure` uses selected reference points. Rediscover artifact-local selectors after topology changes.
 12. For a new model or visible geometry change, review the STEP preview according to `references/snapshot-review.md`. Use one isometric view for a simple part and all views for assemblies, hidden-geometry risk, multi-axis features, or repairs:
 
    ```bash

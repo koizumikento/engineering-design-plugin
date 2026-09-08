@@ -10,7 +10,7 @@ The repository provides one read-only build123d inspection CLI:
 
 ```bash
 uv run python scripts/cad_inspect.py \
-  {refs|measure|align|frame|diff} ...
+  {refs|measure|clearance|align|frame|diff} ...
 ```
 
 STEP and STP are the primary inputs. JSON is the default machine-readable
@@ -76,6 +76,21 @@ is the reported axis position. Other references use their center. Axis
 measurements are signed `to - from`; `--axis distance` returns Euclidean
 distance. Output includes units, expected value, tolerance, delta, and
 pass/fail when `--expected` is supplied.
+
+## Static solid clearance
+
+```bash
+uv run python scripts/cad_inspect.py clearance outputs/assembly.step --from 'label:pcb' --to 'label:lid' --minimum 1.0
+```
+
+This measures the true minimum distance between valid solid/component selections,
+including nested world placement, and checks positive-volume intersection.
+Overlap always fails; contact passes only when the required gap allows it.
+Exit codes are 0 for pass, 1 for criterion failure, and 2 for invalid input.
+`--minimum` comes from the specification; `--tolerance` is numerical, not a
+manufacturing allowance. Point-based `measure --axis distance` is not a substitute.
+Unsupported dynamic, containment, tolerance-stack, or physical claims remain
+separate checks.
 
 ## Read-only alignment
 

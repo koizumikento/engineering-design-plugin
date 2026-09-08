@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-RUNTIME_PYTHON = REPO_ROOT / ".venv" / "bin" / "python"
+RUNTIME_PYTHON = REPO_ROOT / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 RUNNER = REPO_ROOT / "scripts" / "cad_runner.py"
 INSPECT = REPO_ROOT / "scripts" / "cad_inspect.py"
 EXAMPLE = (

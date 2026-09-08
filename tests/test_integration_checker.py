@@ -1,17 +1,65 @@
 import tempfile
+import json
+import subprocess
+import sys
 import unittest
 from pathlib import Path
 
 from scripts.integration_checker import (
     check_height_clearance,
+    check_bottom_clearance,
     check_mounting_holes,
     check_pcb_clearance,
     overall_status,
     parse_spec_file,
+    PCBSpec,
+    EnclosureSpec,
 )
 
 
 class IntegrationCheckerTests(unittest.TestCase):
+    def test_bottom_gap_reports_missing_contact_and_interference(self):
+        enclosure = EnclosureSpec(boss_height=4)
+        for height, required, expected in (
+            (None, 1, "NOT_EVALUATED"),
+            (6, 1, "FAIL"),
+            (4, 1, "FAIL"),
+            (3, 1, "PASS"),
+            (0, 1, "PASS"),
+            (3, None, "CONDITIONAL"),
+            (-1, 1, "ERROR"),
+            (3, -1, "ERROR"),
+            (float("inf"), 1, "ERROR"),
+        ):
+            with self.subTest(height=height, required=required):
+                self.assertEqual(check_bottom_clearance(PCBSpec(bottom_component_height=height), enclosure, required).status, expected)
+
+    def test_bottom_interference_fails_the_documented_cli(self):
+        content = """
+### 基板仕様
+| 基板サイズ | 40 x 20 mm |
+| 基板厚 | 1.6 mm |
+| 最大部品高 | 6 mm |
+| 下面最大部品高 | 6 mm |
+### 筐体仕様
+| 内寸 | 44 x 24 x 13 mm |
+| ボス高さ | 4 mm |
+### Acceptance thresholds
+| 下面最小クリアランス | 1 mm |
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            spec = Path(directory) / "probe.md"
+            spec.write_text(content, encoding="utf-8")
+            run = subprocess.run(
+                [sys.executable, "-X", "utf8", "scripts/integration_checker.py", str(spec), "-o", directory, "--json", "--fail-on-fail"],
+                capture_output=True, text=True, encoding="utf-8", check=False,
+            )
+        self.assertEqual(run.returncode, 2, run.stderr)
+        data = json.loads(run.stdout[run.stdout.index("{"):])
+        self.assertEqual(data["overall_status"], "FAIL")
+        bottom = next(row for row in data["checks"] if row["name"] == "下面クリアランス")
+        self.assertEqual(bottom["details"]["bottom_gap_mm"], -2)
+
     def test_existing_iot_spec_parses_heights_and_bosses(self):
         pcb, enclosure, _ = parse_spec_file(
             Path("examples/iot-device/specs/iot-device-integrated-spec.md")
