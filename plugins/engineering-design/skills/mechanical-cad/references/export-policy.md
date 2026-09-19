@@ -3,7 +3,7 @@
 | 形式 | 主用途 | 正本性 | 検証上の注意 |
 |---|---|---|---|
 | build123d `.py` | パラメトリック定義、再生成 | 設計ロジックの正本 | 依存版、入力、乱数/外部ファイルを固定 |
-| STEP/STP | CAD交換、統合、計測 | 中立形状の一次成果物 | parametric historyは保持しない。再import確認を検討 |
+| STEP/STP | CAD交換、統合、計測 | 中立形状の一次成果物 | parametric historyは保持しない。生成後に再importして検証 |
 | BREP/XBF/XML | OCCT/XCAF系の中間・詳細交換 | 用途限定 | 受け手の対応を確認 |
 | STL/3MF | 3Dプリント、mesh処理 | 派生成果物 | linear/angular tessellation、単位、watertightを確認 |
 | DXF | 2D断面、レーザー/板金輪郭 | 指定輪郭の派生成果物 | 平面、layer、単位、curve近似を記録 |

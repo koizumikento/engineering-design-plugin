@@ -33,6 +33,30 @@
         "嵌合・量産適合や検証済みのPASSを主張しない。"
       ],
       "files": []
+    },
+    {
+      "id": "inspect-only",
+      "prompt": "支給したevals/files/inspection-block.stepの外形X/Y/Zを測定し、40 x 20 x 6 mm（各許容差0.01 mm）と1 solidを満たすか確認して。今回は検査だけ。sourceやSTEPを変更せず、レポートだけ作って。",
+      "expected_output": "既存STEPのread-only測定と合否レポート。新規モデル・設計brief・preview生成は不要。",
+      "assertions": [
+        "外形40 x 20 x 6 mmと1 solidをファイルから検証する。",
+        "検査前後で支給STEPのSHA-256が不変である。",
+        "新規CAD sourceや不要なpreviewを生成せず、測定結果を報告する。"
+      ],
+      "files": [
+        "evals/files/inspection-block.step"
+      ]
+    },
+    {
+      "id": "repair-to-completion",
+      "prompt": "このbuild123d sourceを作成して実行・修正し、40 x 20 x 6 mmのSTEPと検証レポートまで完成させて: from build123d import Box; result = Box(30, 20, 6); cad_expectations = {\"bounding_box\": {\"x_len\": 40, \"y_len\": 20, \"z_len\": 6}}。期待値は要求なので変えず、失敗の報告だけで止めないで。",
+      "expected_output": "幅30のsourceを40へ修復し、再実行・STEP再import・要求検証・preview確認まで完了する。",
+      "assertions": [
+        "初回の寸法不一致を記録し、期待値ではなくsourceの幅を修正する。",
+        "修復後にrunnerと影響する検証を再実行し40 x 20 x 6 mmを確認する。",
+        "新しいSTEPのpreviewを確認し、初回失敗報告や不要な承認待ちで終了しない。"
+      ],
+      "files": []
     }
   ]
 }

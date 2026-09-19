@@ -1,0 +1,119 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "spec-only",
+      "prompt": "屋内で使う基板用試作筐体の要求仕様書だけを作って。CADは不要。",
+      "expect": [
+        "spec-writing"
+      ],
+      "reject": [
+        "mechanical-cad",
+        "circuit-design",
+        "integration"
+      ],
+      "reason": "仕様作成は設計実装と分ける。"
+    },
+    {
+      "id": "spec-patch",
+      "prompt": "既存の筐体要求仕様の幅だけ44 mmへ更新して。他の要求IDを残して。",
+      "expect": [
+        "spec-writing"
+      ],
+      "reject": [
+        "mechanical-cad",
+        "integration"
+      ],
+      "reason": "部分的な要求変更をCAD変更と混同しない。"
+    },
+    {
+      "id": "cad-only",
+      "prompt": "build123dで40 x 20 x 6 mmのブロックを作り、STEPと寸法レポートを出して。",
+      "expect": [
+        "mechanical-cad"
+      ],
+      "reject": [
+        "spec-writing",
+        "circuit-design",
+        "integration"
+      ],
+      "reason": "十分な寸法がある単体CAD。"
+    },
+    {
+      "id": "step-inspection",
+      "prompt": "既存STEPの外形寸法とsolid数を測って。入力ファイルは変更しないで。",
+      "expect": [
+        "mechanical-cad"
+      ],
+      "reject": [
+        "spec-writing",
+        "integration"
+      ],
+      "reason": "単独形状の検査でありPCB筐体適合ではない。"
+    },
+    {
+      "id": "circuit-bom",
+      "prompt": "5 Vを10 kΩ 2本で分圧するSKiDL sourceとBOM/ERCだけを作って。",
+      "expect": [
+        "circuit-design"
+      ],
+      "reject": [
+        "mechanical-cad",
+        "spec-writing",
+        "integration"
+      ],
+      "reason": "回路成果物だけを扱う。"
+    },
+    {
+      "id": "circuit-analysis",
+      "prompt": "支給したRC回路のSPICEモデルで周波数応答を調べ、要求帯域と比較して。",
+      "expect": [
+        "circuit-design"
+      ],
+      "reject": [
+        "mechanical-cad",
+        "spec-writing",
+        "integration"
+      ],
+      "reason": "回路解析の依頼。"
+    },
+    {
+      "id": "pcb-fit",
+      "prompt": "このPCBと筐体STEPの取付穴、下面部品と底面の隙間、コネクタ開口を検証して。",
+      "expect": [
+        "integration"
+      ],
+      "reject": [
+        "spec-writing",
+        "circuit-design"
+      ],
+      "reason": "モデル作成でなく電気機械間の適合検証。"
+    },
+    {
+      "id": "layout-only",
+      "no_skill": true,
+      "prompt": "支給済みの回路図を使い、KiCad PCBの部品配置と配線だけを変更して。",
+      "expect": [],
+      "reject": [
+        "spec-writing",
+        "mechanical-cad",
+        "circuit-design",
+        "integration"
+      ],
+      "reason": "PCB layoutは4スキルの担当外。"
+    },
+    {
+      "id": "mixed",
+      "prompt": "基板と筐体の統合要求仕様書を先に作り、その寸法から収納可能か一次判定して。CAD生成は不要。",
+      "expect": [
+        "spec-writing",
+        "integration"
+      ],
+      "reject": [
+        "mechanical-cad",
+        "circuit-design"
+      ],
+      "reason": "要求定義の後に適合スクリーニング。"
+    }
+  ]
+}

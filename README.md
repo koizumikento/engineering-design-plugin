@@ -72,9 +72,13 @@ codex plugin add engineering-design@engineering-design
 
 Plugin Directoryで `Engineering Design` をinstallまたは再installし、新しいtaskで更新後のskillsを試してください。
 
-Plugin release versionは2.2.0です。Python helper projectの0.3.0とは役割が異なり、`scripts/validate_release.py`がmanifest、marketplace、skill source-of-truthをまとめて検証します。
+Plugin versionは2.2.1です。Python helper projectの0.3.0とは役割が異なり、`scripts/validate_release.py`がmanifest、marketplace、skill source-of-truthをまとめて検証します。
 
 ## Workflow
+
+依頼に合う経路だけを選びます。十分な要求がある実装依頼で仕様書作成を必須前段にしません。CADは新規・変更／既存形状の検査／出力、回路はBOM/ERC／要求された回路図／解析を分けます。仕様の部分更新では既存IDと承認履歴を保持し、変更部分へ旧承認を自動適用しません。
+
+実装は生成・必要な検証・範囲内の修復・影響する再検証まで、検査のみは入力を変更せず結果報告までが完了条件です。referencesは選んだ経路に応じて読みます。
 
 ### 1. Specification
 
@@ -95,10 +99,10 @@ uv run python scripts/cad_runner.py input.py -o outputs/ --report --fail-on-chec
 
 単一部品とアセンブリの両方でbuild123d Pythonをparameterized design definition、STEPをneutral geometry exchange、STL/3MF/DXF/SVG/PNGを用途別の派生成果物として扱います。runnerはSTEPを再importし、BREP、部品label、resolved transform、source-defined expectationを検証します。validityは寸法、干渉、強度、工程適合を自動保証しません。
 
-実装前にprose・画像・技術図面を短いCAD briefへ統合し、dimensioned sourceを画像比率より優先します。visible geometryを作成・変更した場合はSTEP previewを確認し、視覚的な懸念を`cad_expectations`または独立計測へ戻します。失敗時は原因を分類し、最小のsource修正後に依存checkまで再実行します。
+形状を作成・変更する場合は入力を短いCAD briefへ統合し、dimensioned sourceを画像比率より優先します。検査・形式変換だけなら新しい設計briefは不要です。visible geometryを作成・変更した場合はSTEP previewを確認し、視覚的な懸念を`cad_expectations`または独立計測へ戻します。失敗時は原因を分類し、最小のsource修正後に依存checkまで再実行します。
 
 ```bash
-uv run python scripts/preview_generator.py outputs/input.step -o outputs/ --all-views
+uv run python scripts/preview_generator.py outputs/input.step -o outputs/ --view iso
 ```
 
 生成したSTEPはread-only inspection CLIでartifact-local selectorを列挙し、個別寸法、flush/center/coaxial差分、world frame、変更前後を検証できます。JSONが正本で、selectorはtopology変更後の永続安定性を保証しません。
@@ -110,7 +114,11 @@ uv run python scripts/cad_inspect.py frame outputs/input.step '#o1'
 uv run python scripts/cad_inspect.py diff outputs/before.step outputs/after.step --tolerance 0.01
 ```
 
+単純部品のpreviewはiso、assembly・内部形状・複数軸の特徴・修復後は`--all-views`を使います。
+
 ### 3. Circuit design
+
+BOM/ERCだけの依頼はrunnerまで、回路図が必要な場合にexporterと独立KiCad検証を追加します。
 
 ```bash
 uv run python -m py_compile input.py
@@ -140,7 +148,7 @@ Simulationは使用modelとscenarioの範囲だけを立証します。MPN、pin
 ### 4. PCB-enclosure integration
 
 ```bash
-uv run python scripts/integration_checker.py specs/project-integrated-spec.md -o outputs/ --json
+uv run python scripts/integration_checker.py specs/project-integrated-spec.md -o outputs/ --json --fail-on-fail
 ```
 
 CLI overrideは承認済み要求または明記した工程仮定から与えます。

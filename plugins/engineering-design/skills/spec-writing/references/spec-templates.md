@@ -118,6 +118,10 @@ NASA Systems Engineering Handbookは、要求を一つの `shall` を持つ完�
 
 ## 7. テンプレートの選び方
 
+新規仕様で使う。既存仕様の部分更新では既存の構成・要求IDを維持し、
+変更要求と影響するinterface・検証行だけを更新する。承認履歴は残すが、
+変更した要求へ旧版の承認を自動適用しない。未変更の要求を再採番しない。
+
 - `templates/spec/mechanical-spec.md`: 単体部品、筐体、治具、機構
 - `templates/spec/circuit-spec.md`: 回路、電源、信号処理、インターフェース
 - `templates/spec/integrated-spec.md`: PCB、筐体、コネクタ、熱、組立の結合設計

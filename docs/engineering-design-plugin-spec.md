@@ -18,25 +18,22 @@
 
 ```text
 request / source artifacts
-          |
-          v
-spec-writing: IDs, sources, interfaces, acceptance, verification
-          |
-          +--------------------+
-          |                    |
-          v                    v
-mechanical-cad             circuit-design
-build123d/STEP/report      SKiDL/KiCad/BOM/ERC/SPICE
-          |                    |
-          +----------+---------+
-                     v
-integration: common frame, tolerance, envelope, evidence
-                     |
-                     v
-PASS / FAIL / CONDITIONAL / NOT EVALUATED + next evidence
+    -> requirements creation/update: spec-writing
+    -> model/change/export/inspect: mechanical-cad
+    -> logical circuit/ERC, requested schematic/analysis: circuit-design
+    -> PCB-enclosure interface checks: integration
+
+Use multiple skills only when the requested work crosses these boundaries.
+Sufficient supplied requirements allow implementation without spec-writing.
+Each route ends with requested artifacts/evidence and explicit unknowns.
 ```
 
 Concept work may proceed with visible assumptions. Production, safety, compliance, or irreversible work requires resolution of decisions that materially affect the result.
+
+Implementation requests include execution, necessary inspection, in-scope repair,
+and affected revalidation. Inspection-only requests end with findings and preserve
+inputs; specification-only requests end with the requirements and open decisions.
+Read references for the selected route, not the whole reference collection.
 
 ## Skill contracts
 
@@ -61,6 +58,10 @@ Required structure:
 - assumptions/TBD/TBR with owner and resolution
 - verification matrix
 
+For partial updates, preserve existing IDs, unrelated requirements, and approval
+history. Changed requirements need their own review; old approval does not carry
+forward automatically. Templates are for new specifications.
+
 ### `mechanical-cad`
 
 Input:
@@ -77,16 +78,18 @@ Outputs:
 - purpose-specific STL/3MF/DXF/SVG/PNG
 - CAD summary JSON
 
-Checks:
+Generation checks (read-only inspection does not regenerate the model):
 
 ```bash
-uv run python -m py_compile input.py
 uv run python scripts/cad_runner.py input.py -o outputs/ --report --fail-on-check
 uv run python scripts/cad_inspect.py refs outputs/input.step
-uv run python scripts/preview_generator.py outputs/input.step -o outputs/ --all-views
+uv run python scripts/preview_generator.py outputs/input.step -o outputs/ --view iso
 ```
 
 Shape validity, dimensions, topology, visible geometry, assembly transform, tolerance stack, and process-specific constraints are separate checks. build123d joints resolve source placement; exported STEP is not assumed to preserve a live constraint.
+
+The isometric example is for a simple part; use `--all-views` for assemblies,
+hidden or multi-axis features, and repairs per the snapshot-review reference.
 
 `scripts/cad_inspect.py` is the read-only STEP inspection entrypoint. It
 provides `refs`, `measure`, `clearance`, `align`, `frame`, and `diff`; JSON is the canonical
@@ -116,10 +119,10 @@ Outputs:
 - KiCad 9/10 schematic/project for review and PCB handoff
 - optional netlist and simulation evidence
 
-Checks:
+Run the logical runner for source/BOM/ERC work. Add the exporter and independent
+checks only for a requested schematic/handoff; analysis uses the SPICE reference.
 
 ```bash
-uv run python -m py_compile input.py
 uv run python skills/circuit-design/scripts/skidl_runner.py input.py -o outputs/
 uv run python skills/circuit-design/scripts/kicad_sch_export.py input.py -o outputs/
 kicad-cli sch erc --exit-code-violations --format json -o outputs/reports/project-kicad-erc.json outputs/kicad/project/project.kicad_sch
@@ -148,7 +151,7 @@ Output:
 Text screening:
 
 ```bash
-uv run python scripts/integration_checker.py specs/project-integrated-spec.md -o outputs/ --json
+uv run python scripts/integration_checker.py specs/project-integrated-spec.md -o outputs/ --json --fail-on-fail
 ```
 
 The checker evaluates parsed nominal dimensions only, including separate upper
@@ -212,7 +215,12 @@ Each skill also owns `evals/evals.json` with representative and boundary prompts
 observable assertions, and input-file references. The release validator checks
 this corpus; actual old/new behavior comparisons follow [skill evaluation](skill-evaluation.md).
 
-For every skill change:
+During edits, validate changed references, routing metadata, and affected behavior
+cases. Run relevant helper entrypoints/tests for changed workflows; rerun failed
+and dependent checks after repairs. Do not repeat unaffected validation without
+new evidence. Preserve unsupported checks as not evaluated.
+
+Before release, run the complete existing gate:
 
 1. run `uv sync --frozen`;
 2. run `uv run python scripts/sync_codex_plugin_package.py`;
@@ -224,7 +232,7 @@ For every skill change:
 8. review `git diff` for unintended copied workflow logic.
 
 The repository-local release validator is the CI source of truth for all four
-skill folders, relative Markdown links, plugin 2.2.0 manifests, marketplace
+skill folders, relative Markdown links, plugin 2.2.1 manifests, marketplace
 sources, and exact synchronization of the packaged runtime files. It does not depend
 on a local Codex installation. GitHub Actions uses only `contents: read`,
 installs the frozen Python 3.11 environment, and runs the same validator and
