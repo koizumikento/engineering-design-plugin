@@ -1,7 +1,9 @@
 # CAD brief
 
-Use this reference before writing or changing build123d source. The brief is an
-internal working note, not a form that the user must complete.
+Use this reference when designing or changing geometry. The brief is an
+internal working note, not a form that the user must complete. Reuse supplied
+requirements; a small change needs only changed dimensions, invariants, and
+checks. Read-only inspection and format conversion do not need a new brief.
 
 ## Purpose
 

@@ -12,7 +12,7 @@ from urllib.parse import unquote
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_PLUGIN_VERSION = "2.2.0"
+EXPECTED_PLUGIN_VERSION = "2.2.1"
 EXPECTED_PROJECT_VERSION = "0.3.0"
 EXPECTED_SKILLS = {
     "circuit-design",
@@ -141,7 +141,47 @@ def validate_evals(skill_dir: Path, errors: list[str]) -> None:
                 errors.append(f"{skill_dir.name}/{case_id}: invalid input file {name!r}")
 
 
+def validate_routing_cases(path: Path, errors: list[str]) -> None:
+    payload = load_json(path)
+    cases = payload.get("cases")
+    if payload.get("schema_version") != 1 or not isinstance(cases, list) or not cases:
+        errors.append("routing: expected schema_version 1 and nonempty cases")
+        return
+    ids: set[str] = set()
+    coverage = {"expect": set(), "reject": set()}
+    for case in cases:
+        if not isinstance(case, dict):
+            errors.append("routing: case must be an object")
+            continue
+        for key in ("id", "prompt", "reason"):
+            if not isinstance(case.get(key), str) or not case[key].strip():
+                errors.append(f"routing: nonempty {key} required")
+        case_id = case.get("id")
+        if isinstance(case_id, str):
+            if case_id in ids:
+                errors.append(f"routing: duplicate ID {case_id}")
+            ids.add(case_id)
+        selections: dict[str, set[str]] = {}
+        for key in ("expect", "reject"):
+            names = case.get(key)
+            if not isinstance(names, list) or any(not isinstance(n, str) for n in names):
+                errors.append(f"routing/{case_id}: {key} must be a list of skill names")
+                continue
+            selections[key] = set(names)
+            if len(names) != len(selections[key]) or not selections[key] <= EXPECTED_SKILLS:
+                errors.append(f"routing/{case_id}: duplicate or unknown skills in {key}")
+            coverage[key].update(selections[key])
+        if selections.get("expect", set()) & selections.get("reject", set()):
+            errors.append(f"routing/{case_id}: expect/reject overlap")
+        if "expect" in selections and case.get("no_skill", False) is not (not selections["expect"]):
+            errors.append(f"routing/{case_id}: no_skill must match an empty expect list")
+    for key, names in coverage.items():
+        if missing := EXPECTED_SKILLS - names:
+            errors.append(f"routing: missing {key} coverage for {sorted(missing)}")
+
+
 def validate_skills(errors: list[str]) -> None:
+    validate_routing_cases(REPO_ROOT / "docs" / "skill-routing-cases.json", errors)
     skills_root = REPO_ROOT / "skills"
     actual_skills = {
         path.name for path in skills_root.iterdir() if path.is_dir()

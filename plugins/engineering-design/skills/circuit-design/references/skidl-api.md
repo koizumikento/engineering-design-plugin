@@ -111,6 +111,10 @@ uv run python skills/circuit-design/scripts/skidl_runner.py input.py -o outputs/
 ```
 
 legacy netlistは下流が要求する場合だけ `--netlist` で追加する。
+要求した各ファイルが今回の実行で生成されたことを確認する。summaryに
+出力先が載るだけでは生成成功の証拠にならない。BOM/ERCのみの依頼では
+schematicやsimulationを追加しない。ERCエラーはreportと終了コード2を保持し、
+`--no-erc`は未実施として扱う。
 
 ## Official sources
 

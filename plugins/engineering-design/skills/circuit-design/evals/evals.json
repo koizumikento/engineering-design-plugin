@@ -33,6 +33,17 @@
         "CLI ERC・接続等価性を未実施ならNOT_EVALUATEDとして残す。"
       ],
       "files": []
+    },
+    {
+      "id": "bom-erc-only",
+      "prompt": "5 Vを抵抗10 kΩ 2本で分圧するSKiDL sourceとBOM・ERCレポートだけを作って。外部入力・出力・GNDはコネクタで示す。負荷は無視する試作。利用可能なKiCad symbol libraryの版を確認して使ってよい。回路図、legacy netlist、SPICE解析は不要。",
+      "expected_output": "source、BOM、ERCの今回生成を確認し、要求外のschematicやsimulationを追加しない。",
+      "assertions": [
+        "公称無負荷出力2.5 Vを計算し、sourceとrunnerの対象版を一致させる。",
+        "今回のBOMとERCレポートを確認し、失敗や未評価を正直に報告する。",
+        "KiCad exporter、legacy netlist、SPICEを実行せず、追加成果物の確認質問で停止しない。"
+      ],
+      "files": []
     }
   ]
 }

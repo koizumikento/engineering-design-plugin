@@ -36,6 +36,10 @@ This repository is the source-of-truth for the engineering design agent skills. 
 
 ## Validation
 
+- During edits, run checks affected by the change; repeat them after repairs that
+  affect their evidence. Use the complete existing CI gate before a release.
+- For skill behavior changes, compare affected cases using `docs/skill-evaluation.md`.
+  Structural validation alone is not evidence of improved agent behavior.
 - For documentation-only changes, verify references and example commands still point to existing paths.
 - For workflow changes that mention scripts, prefer validating the documented entrypoints that already exist in `scripts/`.
 - Before release validation, run
