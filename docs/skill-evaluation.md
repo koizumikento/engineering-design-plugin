@@ -87,7 +87,6 @@ generation. Neither replaces an actual old/new agent comparison.
 - [Agent Skills: optimizing descriptions](https://agentskills.io/skill-creation/optimizing-descriptions)
 - Existing repository comparison: [STR-231](decisions/STR-231-agent-generation-benchmark.md)
 - [OpenAI: Rethinking skills and prompts for GPT-6 Astra](https://developers.openai.com/blog/rethinking-skills-and-prompts-for-gpt-6-astra) — reviewed 2026-09-19.
-- Current update evidence and limitations: [STR-406](decisions/STR-406-skill-workflows.md).
 
 Guidance checked on 2026-09-08. Keep the previous engine benchmark separate from
 current production skill results.
