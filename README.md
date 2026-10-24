@@ -21,15 +21,20 @@
 
 前提:
 
-- `uv`
-- Python 3.11.x（repository default: 3.11.4）
+- `uv` 0.13.5以上
+- Python 3.11.17以上、3.12未満（repository default: 3.11.17）
 - KiCad 9または10と対応するsymbol/footprint libraries（回路図生成・独立検証を行う場合）
 - ngspice（SPICE analysisを行う場合）
 - optional: VTK（PNG preview）
 
 ```bash
-uv sync
+uv python install
+uv sync --frozen --managed-python
 ```
+
+2026年10月の証明書更新には、lock内のcertifiだけでなくuv自身とPython配布に含まれるpip/ensurepipの更新も必要です。uv 0.13.5のmanaged Pythonは更新済みの20261021ビルドを利用します。既存の3.11.17環境は自動で置き換わらないため、uv更新後に`uv python install --reinstall 3.11.17`を実行し、仮想環境を再作成してください。OS・KiCad同梱Python・独自インストーラーのCAストアと既存環境のpipは別途確認が必要です。
+
+根拠: [certifi advisory](https://github.com/certifi/python-certifi/security/advisories/GHSA-6q48-6c7w-9gw2)、[Python security release](https://www.python.org/downloads/release/python-31117/)、[Python installer guidance](https://blog.python.org/2026/10/python-3151-3149-31317/)、[uv 0.13.5](https://github.com/astral-sh/uv/releases/tag/0.13.5)。この更新は、10月22日に別途修正された`tar_filter`のCVE-2026-114583の修正を保証しません。リポジトリ内に直接のtar展開経路は確認されていません。
 
 日本語WindowsではSKiDL 2.3.0のsource buildをUTF-8で実行します。
 
