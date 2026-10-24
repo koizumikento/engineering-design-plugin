@@ -33,13 +33,18 @@ jobs:
         with:
           version: "0.13.5"
           enable-cache: true
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: |
+            uv.lock
+            pocs/build123d-migration/uv.lock
 
       - name: Install managed Python
         run: uv python install
 
       - name: Sync locked environment
         run: uv sync --frozen
+
+      - name: Sync locked PoC environment
+        run: uv sync --frozen --project pocs/build123d-migration
 
       - name: Check packaged plugin is synchronized
         run: |
